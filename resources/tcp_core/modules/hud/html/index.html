@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="style.css">
+    <title>TCP HUD</title>
+</head>
+<body>
+    <div id="hud-container">
+        <!-- Street info with tilt -->
+        <div class="hud-text-group tilted">
+            <div id="compass" class="hud-text">N</div>
+            <div id="street" class="hud-text">Test Street</div>
+            <div id="city" class="hud-text">City: Test</div>
+            <div id="neighborhood" class="hud-text">Neighborhood: Test</div>
+        </div>
+
+        <!-- Approaching street (no tilt) -->
+        <div id="approaching-box" class="hidden">
+            <div id="approaching-text"></div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

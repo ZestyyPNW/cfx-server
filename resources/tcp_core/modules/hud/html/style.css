@@ -1,0 +1,78 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    overflow: hidden;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: transparent;
+}
+
+#hud-container {
+    position: absolute;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+}
+
+/* Text group anchored near minimap */
+.hud-text-group.tilted {
+    position: fixed;
+    left: 1.2vw;
+    bottom: 18vh;
+    transform: none;
+    background: rgba(0, 0, 0, 0.45);
+    padding: 8px 10px;
+    z-index: 9999;
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.hud-text {
+    font-size: 14px;
+    font-weight: 600;
+    color: #ffffff;
+    text-shadow:
+        0 0 6px rgba(0, 0, 0, 0.9),
+        0 2px 4px rgba(0, 0, 0, 1);
+    white-space: nowrap;
+    line-height: 1.2;
+}
+
+#compass {
+    font-size: 15px;
+    letter-spacing: 1px;
+}
+
+/* Approaching street box */
+#approaching-box {
+    position: fixed;
+    left: 1.2vw;
+    bottom: 24vh;
+    background: rgba(0, 200, 0, 0.78);
+    padding: 6px 10px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 12vw;
+    transition: opacity 0.2s ease;
+    z-index: 10000;
+}
+
+#approaching-box.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+#approaching-text {
+    font-size: 14px;
+    font-weight: 700;
+    color: #ffffff;
+    text-shadow: 0 0 6px rgba(0, 0, 0, 0.85);
+    text-align: center;
+}
