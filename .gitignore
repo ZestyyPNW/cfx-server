@@ -1,0 +1,15 @@
+db
+logs
+
+cache
+txData
+
+node_modules
+
+# Exclude large binary files and server executables
+core
+alpine/
+
+# Exclude large game asset files
+resources/**/stream/
+resources/lasd_tahoe_v2/
