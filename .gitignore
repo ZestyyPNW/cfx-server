@@ -15,3 +15,4 @@ alpine/
 # Exclude large game asset files
 resources/**/stream/
 resources/lasd_tahoe_v2/
+secrets.cfg
