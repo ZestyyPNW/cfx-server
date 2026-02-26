@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MDC Web Wrapper</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="mdcRoot" class="hidden">
+    <div id="topbar">
+      <div id="title">MDC</div>
+      <div id="controls">
+        <button id="btnReload" title="Reload iframe">↻</button>
+        <button id="btnClose" title="Close">✕</button>
+      </div>
+    </div>
+
+    <iframe id="mdcFrame" src="about:blank" allow="clipboard-read; clipboard-write; fullscreen"></iframe>
+    <div id="resizeHandle" title="Resize"></div>
+  </div>
+
+  <script src="app.js?v=20260223_032600"></script>
+</body>
+</html>

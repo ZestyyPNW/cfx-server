@@ -1,0 +1,11 @@
+{
+  "logConfigs": [
+    {
+      "type": "scnlogging",
+      "source": "default",
+      "url": "https://logging.sloosecannon.io/api/log/add"
+    }
+  ],
+  "clientLogLevel": 3,
+  "serverLogLevel": 3
+}

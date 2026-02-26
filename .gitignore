@@ -1,0 +1,87 @@
+# Server runtime / cache
+db/
+logs/
+cache/
+txData/
+alpine/
+alpine_old/
+artifacts_stable/
+*.log
+core
+myLogo.png
+radio_morsecode_test.wav
+.replxx_history
+.mono/
+
+# Node dependencies
+node_modules/
+
+# Editor / tool artifacts
+.aider*
+Codex.md
+opencode.json
+opencode-memo.md
+
+# Large game-asset resource folders
+# Using [[] and []] to match literal bracket characters in gitignore
+resources/[[]clothing[]]/
+resources/[[]vehicles[]]/
+resources/[[]weapons[]]/
+resources/[[]buildings[]]/
+resources/[[]ox[]]/
+resources/[[]fxdefaults[]]/
+
+# Large UI assets
+resources/[[]nd[]]/ND_Dealership/ui/
+
+# Stream directories (audio/model streaming)
+resources/**/stream/
+
+# Loading screen media files (keep HTML/CSS/JS)
+resources/**/ep_loading/web/*.mp4
+resources/**/ep_loading/web/*.mp3
+resources/**/ep_loading/web/*.png
+resources/**/ep_loading/web/backgrounds/
+
+# Binary game asset extensions
+*.ytd
+*.yft
+*.ydr
+*.ydd
+*.ymap
+*.ytyp
+*.ybn
+*.ynv
+*.oac
+*.nametable
+*.awc
+*.dat151
+*.dat54
+*.dat10
+*.rel
+*.rpf
+*.ogg
+*.wav
+*.mp3
+*.mp4
+*.webm
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.svg
+*.ico
+*.ttf
+*.woff
+*.woff2
+*.eot
+
+# Backup/snapshot config files (may contain secrets)
+server.cfg.BAK_ALL_DISABLED
+server.cfg.bak-ndcore-config
+server.cfg.bkp
+server.cfg.pre-ndcore.bak
+run.sh.old
+server.authz
+permissions.cfg.bak.*

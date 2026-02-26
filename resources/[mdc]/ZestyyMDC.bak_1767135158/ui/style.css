@@ -1,0 +1,119 @@
+body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: transparent;
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+#mdc-window {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 1200px;
+    height: 750px;
+    background-color: #1e1e1e;
+    border: 1px solid #333;
+    border-radius: 5px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+#mdc-header {
+    height: 40px;
+    background-color: #252525;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 15px;
+    cursor: grab;
+    border-bottom: 1px solid #333;
+    user-select: none;
+}
+
+#mdc-header:active { cursor: grabbing; }
+
+.header-info {
+    display: flex;
+    align-items: center;
+    color: #e0e0e0;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.header-info i {
+    margin-right: 10px;
+    color: #f1c40f;
+}
+
+.header-controls { display: flex; gap: 8px; }
+
+.control-btn {
+    background: none;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    font-size: 14px;
+    transition: color 0.2s;
+    padding: 5px;
+}
+
+.control-btn:hover { color: #fff; }
+.control-btn.close:hover { color: #e74c3c; }
+
+#mdc-main {
+    flex: 1;
+    position: relative;
+    background-color: #1a1a1a;
+}
+
+#mdc-frame {
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
+}
+
+#drag-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: none;
+    z-index: 10;
+}
+
+#mdc-window.dragging #drag-overlay { display: block; }
+
+#mdc-notify-root {
+    position: absolute;
+    right: 24px;
+    bottom: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 9999;
+    pointer-events: none;
+}
+
+.mdc-toast {
+    width: 320px;
+    background: #2b2b2b;
+    border: 1px solid #3a3a3a;
+    border-radius: 10px;
+    padding: 12px 14px;
+    color: #f3f3f3;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    transform: translateY(10px);
+    opacity: 0;
+    transition: transform 180ms ease, opacity 180ms ease;
+}
+
+.mdc-toast.show {
+    transform: translateY(0);
+    opacity: 1;
+}

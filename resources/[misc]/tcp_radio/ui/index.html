@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: transparent; width: 100vw; height: 100vh; font-family: 'Inter', sans-serif; overflow: hidden; }
+
+    #radio { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); cursor: grab; }
+    #radio.dragging { cursor: grabbing; }
+    #radio img#frame { max-height: 55vh; display: block; border-radius: 6px; user-select: none; -webkit-user-drag: none; pointer-events: none; }
+    .hotspot { position: absolute; cursor: pointer; border: none; background: transparent; z-index: 10; }
+    .hotspot:hover { background: rgba(255,255,255,0.06); }
+    .hotspot:active { background: rgba(255,255,255,0.12); }
+
+    #screen { position: absolute; background: #08080d; z-index: 5; display: none; border-radius: 2px; overflow: hidden; }
+    #screen.on { display: flex; flex-direction: column; }
+
+    /* HOME */
+    .home { width:100%; height:100%; display:flex; flex-direction:column; color:#ccc; user-select:none; }
+
+    .url-bar { display:flex; align-items:center; gap:6px; padding:3% 4% 1.5%; flex-shrink:0; }
+    .url-bar input { flex:1; background:#141419; border:1px solid #222; border-radius:6px; padding:5px 10px; color:#ddd; font-family:'Inter',sans-serif; font-size:0.6em; outline:none; transition:border-color .15s; }
+    .url-bar input:focus { border-color:#3b9dff; }
+    .url-bar input::placeholder { color:#444; }
+    .url-bar button { background:#3b9dff; border:none; border-radius:6px; color:#000; font-size:0.55em; font-weight:700; padding:5px 10px; cursor:pointer; font-family:'Inter',sans-serif; }
+    .url-bar button:hover { background:#5bb0ff; }
+
+    .tabs { display:flex; gap:4px; padding:0 4% 1.5%; flex-shrink:0; flex-wrap:wrap; }
+    .tab { background:#141419; border:1px solid #1a1a22; border-radius:5px; padding:3px 8px; font-size:0.45em; font-weight:600; color:#555; cursor:pointer; transition:all .15s; text-transform:uppercase; letter-spacing:0.5px; }
+    .tab:hover { color:#aaa; border-color:#333; }
+    .tab.active { background:#3b9dff; color:#000; border-color:#3b9dff; }
+
+    .stations { flex:1; overflow-y:auto; padding:0 4% 2%; display:flex; flex-direction:column; gap:3px; }
+    .stations::-webkit-scrollbar { width:4px; }
+    .stations::-webkit-scrollbar-track { background:transparent; }
+    .stations::-webkit-scrollbar-thumb { background:#222; border-radius:4px; }
+
+    .station-row { display:flex; align-items:center; gap:8px; padding:5px 8px; background:#0e0e14; border:1px solid transparent; border-radius:8px; cursor:pointer; transition:all .12s; flex-shrink:0; }
+    .station-row:hover { background:#161620; border-color:#222; }
+    .station-row.active { background:rgba(59,157,255,0.08); border-color:rgba(59,157,255,0.25); }
+    .station-row.loading { opacity:0.6; }
+    .st-freq { font-size:0.65em; font-weight:800; color:#3b9dff; min-width:42px; text-align:right; }
+    .st-info { flex:1; min-width:0; }
+    .st-name { font-size:0.58em; font-weight:600; color:#ddd; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .st-meta { font-size:0.42em; color:#555; font-weight:500; }
+    .st-genre { font-size:0.4em; font-weight:600; padding:2px 5px; border-radius:3px; background:#1a1a22; color:#666; white-space:nowrap; }
+    .st-playing { font-size:0.55em; color:#3b9dff; display:none; }
+    .station-row.active .st-playing { display:block; }
+
+    /* NOW PLAYING BAR */
+    .np-bar { display:none; align-items:center; gap:8px; padding:2.5% 4%; background:#0c0c12; border-top:1px solid #1a1a22; flex-shrink:0; cursor:pointer; }
+    .np-bar.visible { display:flex; }
+    .np-bar .np-eq { display:flex; gap:2px; align-items:flex-end; height:14px; }
+    .np-bar .np-eq .eq-b { width:2px; background:#3b9dff; border-radius:1px; animation:eqB .5s ease-in-out infinite alternate; }
+    .np-bar.paused .eq-b { animation-play-state:paused !important; height:3px !important; }
+    @keyframes eqB { from{height:3px} to{height:14px} }
+    .np-info { flex:1; min-width:0; }
+    .np-name { font-size:0.55em; font-weight:600; color:#ddd; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .np-detail { font-size:0.4em; color:#555; }
+    .np-ctrl { background:none; border:none; color:#888; cursor:pointer; font-size:0.7em; padding:4px; transition:color .15s; }
+    .np-ctrl:hover { color:#fff; }
+
+    /* PLAYER VIEW */
+    .player-view { width:100%; height:100%; display:none; flex-direction:column; background:#08080d; }
+    .player-view.active { display:flex; }
+    .player-top { display:flex; align-items:center; gap:8px; padding:2.5% 3.5%; flex-shrink:0; }
+    .back-btn { background:#1a1a22; border:1px solid #252530; border-radius:6px; color:#888; font-size:0.6em; padding:5px 10px; cursor:pointer; display:flex; align-items:center; gap:5px; transition:all .15s; font-family:'Inter',sans-serif; }
+    .back-btn:hover { color:#fff; background:#222230; }
+    .np-label { font-size:0.55em; color:#3b9dff; font-weight:600; text-transform:uppercase; letter-spacing:1px; }
+    .embed-wrap { flex:1; padding:0 3% 3%; min-height:0; }
+    .embed-wrap iframe { width:100%; height:100%; border:none; border-radius:8px; }
+</style>
+</head>
+<body>
+<div id="radio">
+    <img id="frame" src="../radio_overlay.png" alt="Radio">
+    <div id="screen">
+        <div class="home" id="home-view">
+            <div class="url-bar">
+                <input type="text" id="url-input" placeholder="Paste Spotify, YouTube, SoundCloud link...">
+                <button id="url-go"><i class="fas fa-play"></i> Play</button>
+            </div>
+            <div class="tabs" id="tabs"></div>
+            <div class="stations" id="station-list"></div>
+            <div class="np-bar" id="np-bar">
+                <div class="np-eq" id="np-eq"></div>
+                <div class="np-info"><div class="np-name" id="np-name"></div><div class="np-detail" id="np-detail"></div></div>
+                <button class="np-ctrl" id="np-prev"><i class="fas fa-backward-step"></i></button>
+                <button class="np-ctrl" id="np-play"><i class="fas fa-pause"></i></button>
+                <button class="np-ctrl" id="np-next"><i class="fas fa-forward-step"></i></button>
+            </div>
+        </div>
+        <div class="player-view" id="player-view">
+            <div class="player-top">
+                <button class="back-btn" id="back-btn"><i class="fas fa-chevron-left"></i> Back</button>
+                <span class="np-label" id="pv-label">Now Playing</span>
+            </div>
+            <div class="embed-wrap"><iframe id="embed-frame" allow="autoplay; encrypted-media" allowfullscreen></iframe></div>
+        </div>
+    </div>
+        <button class="hotspot" id="btn-power" title="Power"></button>
+        <button class="hotspot" id="btn-volup" title="Volume Up"></button>
+        <button class="hotspot" id="btn-voldn" title="Volume Down"></button>
+</div>
+
+<script>
+const radio = document.getElementById('radio');
+const img = document.getElementById('frame');
+const btnPower = document.getElementById('btn-power');
+const btnVolUp = document.getElementById('btn-volup');
+const btnVolDn = document.getElementById('btn-voldn');
+const screen = document.getElementById('screen');
+const homeView = document.getElementById('home-view');
+const playerView = document.getElementById('player-view');
+const urlInput = document.getElementById('url-input');
+const embedFrame = document.getElementById('embed-frame');
+const stationListEl = document.getElementById('station-list');
+const npBar = document.getElementById('np-bar');
+const tabsEl = document.getElementById('tabs');
+
+let screenOn = false;
+
+const STATIONS = [
+    { freq:'103.5', call:'KOST',  name:'KOST 103.5',               city:'Los Angeles',  genre:'Soft Rock' },
+    { freq:'104.3', call:'KBIG',  name:'104.3 MYfm',               city:'Los Angeles',  genre:'Top 40 & Pop' },
+    { freq:'102.7', call:'KIIS',  name:'102.7 KIIS FM',            city:'Los Angeles',  genre:'Top 40 & Pop' },
+    { freq:'98.7',  call:'KYSR',  name:'ALT 98.7',                  city:'Los Angeles',  genre:'Alternative Rock' },
+    { freq:'92.3',  call:'KRRL',  name:'Real 92.3',                 city:'Los Angeles',  genre:'Hip Hop & R&B' },
+    { freq:'640',   call:'KFI',   name:'KFI AM 640',                city:'Los Angeles',  genre:'News & Talk' },
+    { freq:'570',   call:'KLAC',  name:'AM 570 KLAC',               city:'Los Angeles',  genre:'Sports' },
+    { freq:'1150',  call:'KEIB',  name:'AM 1150 The Patriot',       city:'Los Angeles',  genre:'News & Talk' },
+    { freq:'98.1',  call:'KISQ',  name:'98.1 The Breeze',           city:'San Francisco', genre:'Soft Rock' },
+    { freq:'101.3', call:'KIOI',  name:'Star 101.3',                city:'San Francisco', genre:'Top 40 & Pop' },
+    { freq:'106.1', call:'KMEL',  name:'106.1 KMEL',                city:'San Francisco', genre:'Hip Hop & R&B' },
+    { freq:'94.9',  call:'KYLD',  name:'Wild 94.9',                 city:'San Francisco', genre:'Top 40 & Pop' },
+    { freq:'103.7', call:'KOSF',  name:'Classic Hits 103.7',        city:'San Francisco', genre:'Oldies' },
+    { freq:'960',   call:'KNEW',  name:'iHeart Sports 960',         city:'San Francisco', genre:'Sports' },
+    { freq:'910',   call:'KKSF',  name:'BIN 910',                   city:'San Francisco', genre:'News & Talk' },
+    { freq:'93.3',  call:'KHTS',  name:'Channel 93.3',              city:'San Diego',    genre:'Top 40 & Pop' },
+    { freq:'94.1',  call:'KMYI',  name:'Star 94.1',                 city:'San Diego',    genre:'Top 40 & Pop' },
+    { freq:'101.5', call:'KGB',   name:'KGB 101.5',                 city:'San Diego',    genre:'Classic Rock' },
+    { freq:'105.3', call:'KIOZ',  name:'Rock 105.3',                city:'San Diego',    genre:'Rock' },
+    { freq:'95.7',  call:'XHOCL', name:"JAM'N 95.7",               city:'San Diego',    genre:'Hip Hop & R&B' },
+    { freq:'600',   call:'KOGO',  name:'NewsRadio 600 KOGO',        city:'San Diego',    genre:'News & Talk' },
+    { freq:'760',   call:'KFMB',  name:'San Diego Sports 760',      city:'San Diego',    genre:'Sports' },
+    { freq:'1360',  call:'KLSD',  name:'AM 1360 The Patriot',       city:'San Diego',    genre:'News & Talk' },
+    { freq:'99.1',  call:'KGGI',  name:'99.1 KGGI',                 city:'Riverside',    genre:'Top 40 & Pop' },
+    { freq:'103.3', call:'KQMB',  name:'Q103.3',                    city:'Riverside',    genre:'Classic Rock' },
+    { freq:'94.5',  call:'KOOL',  name:'Radio 94.5',                city:'Riverside',    genre:'Alternative Rock' },
+    { freq:'1350',  call:'KTDD',  name:'Fox Sports 1350',           city:'Riverside',    genre:'Sports' },
+    { freq:'1440',  call:'KUHL',  name:'BIN 1440',                  city:'Riverside',    genre:'News & Talk' },
+    { freq:'1530',  call:'KFBK',  name:'KFBK News Radio',           city:'Sacramento',   genre:'News & Talk' },
+    { freq:'92.5',  call:'KBEE',  name:'92.5 The Breeze',           city:'Sacramento',   genre:'Soft Rock' },
+    { freq:'101.1', call:'KCCL',  name:'V101.1',                    city:'Sacramento',   genre:'Hip Hop & R&B' },
+    { freq:'93.7',  call:'KRXQ',  name:'93.7 The River',            city:'Sacramento',   genre:'Classic Rock' },
+    { freq:'650',   call:'KSTE',  name:'Talk 650 KSTE',             city:'Sacramento',   genre:'News & Talk' },
+    { freq:'107.1', call:'KNCI',  name:'107.1 The Bull',            city:'Sacramento',   genre:'Country' },
+    { freq:'95.0',  call:'KBOS',  name:'B95',                       city:'Fresno',       genre:'Top 40 & Pop' },
+    { freq:'103.7', call:'KVHF',  name:'103.7 The Beat',            city:'Fresno',       genre:'Hip Hop & R&B' },
+    { freq:'92.9',  call:'KLBN',  name:'La Preciosa 92.9',          city:'Fresno',       genre:'Spanish' },
+    { freq:'102.7', call:'KKWL',  name:'102.7 The Wolf',            city:'Fresno',       genre:'Country' },
+    { freq:'98.9',  call:'KSOF',  name:'Soft Rock 98.9',            city:'Fresno',       genre:'Soft Rock' },
+    { freq:'96.7',  call:'KNAX',  name:'Power Talk 96.7',           city:'Fresno',       genre:'News & Talk' },
+    { freq:'1340',  call:'KCBL',  name:'Fox Sports 1340',           city:'Fresno',       genre:'Sports' },
+    { freq:'1130',  call:'KRDU',  name:'KRDU 1130',                 city:'Fresno',       genre:'Christian' },
+    { freq:'102.5', call:'KDON',  name:'102.5 KDON',                city:'Monterey',     genre:'Top 40 & Pop' },
+    { freq:'105.1', call:'KOCP',  name:'105.1 K-Ocean',             city:'Monterey',     genre:'Hip Hop & R&B' },
+    { freq:'100.7', call:'KLOK',  name:'La Preciosa 100.7',         city:'Monterey',     genre:'Spanish' },
+    { freq:'92.7',  call:'KTOM',  name:'92.7 K-TOM',                city:'Monterey',     genre:'Country' },
+    { freq:'1460',  call:'KION',  name:'Power Talk 1460',           city:'Monterey',     genre:'News & Talk' },
+    { freq:'102.3', call:'KHKK',  name:'Sunny 102.3',               city:'Modesto',      genre:'Soft Rock' },
+    { freq:'100.1', call:'KHOP',  name:'Mega 100',                  city:'Stockton',     genre:'Hip Hop & R&B' },
+    { freq:'96.7',  call:'KVFX',  name:'Rock 96.7',                 city:'Modesto',      genre:'Classic Rock' },
+    { freq:'92.9',  call:'KWIN',  name:'92.9 The Big Dog',          city:'Modesto',      genre:'Country' },
+    { freq:'1360',  call:'KFIV',  name:'PowerTalk 1360 KFIV',       city:'Modesto',      genre:'News & Talk' },
+    { freq:'1280',  call:'KXTK',  name:'Fox Sports 1280',           city:'Modesto',      genre:'Sports' },
+    { freq:'98.5',  call:'KFOX',  name:'98.5 The Fox',              city:'Bakersfield',  genre:'Classic Rock' },
+    { freq:'105.3', call:'KKBB',  name:'Sunny 105.3',               city:'Bakersfield',  genre:'Soft Rock' },
+    { freq:'106.1', call:'KRAB',  name:'Alt 106.1 KRAB',            city:'Bakersfield',  genre:'Alternative Rock' },
+    { freq:'970',   call:'KHTY',  name:'AM 970 Fox Sports Radio',   city:'Bakersfield',  genre:'Sports' },
+    { freq:'800',   call:'KERN',  name:'Fox Sports 800',            city:'Bakersfield',  genre:'Sports' },
+    { freq:'107.9', call:'KVVF',  name:'KISS 107.9',                city:'Bakersfield',  genre:'Top 40 & Pop' },
+];
+
+const GENRE_COLORS = {
+    'Top 40 & Pop':'#e640dc','Hip Hop & R&B':'#f59e0b','Rock':'#ef4444','Classic Rock':'#ef4444',
+    'Alternative Rock':'#8b5cf6','Soft Rock':'#ec4899','News & Talk':'#6b7280','Sports':'#10b981',
+    'Country':'#d97706','Oldies':'#f472b6','Spanish':'#f97316','Christian':'#60a5fa',
+};
+
+let isPlaying = false;
+let currentStationIdx = -1;
+let activeFilter = 'All';
+let streamCache = {};
+let embedMode = false;
+let radioVolume = 0.5;
+
+const _resName = (typeof GetParentResourceName === 'function') ? GetParentResourceName() : 'tcp_radio';
+function nuiPost(endpoint, data) {
+    return fetch(`https://${_resName}/${endpoint}`, {
+        method: 'POST', body: JSON.stringify(data || {})
+    }).then(r => r.text()).catch(() => 'err');
+}
+
+// Build genres for tabs
+const genres = ['All', ...new Set(STATIONS.map(s => s.genre))];
+genres.forEach(g => {
+    const tab = document.createElement('div');
+    tab.className = 'tab' + (g === 'All' ? ' active' : '');
+    tab.textContent = g;
+    tab.addEventListener('click', () => {
+        activeFilter = g;
+        document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.textContent === g));
+        renderStations();
+    });
+    tabsEl.appendChild(tab);
+});
+
+// EQ bars for now-playing bar
+const npEq = document.getElementById('np-eq');
+for (let i = 0; i < 8; i++) {
+    const b = document.createElement('div');
+    b.className = 'eq-b';
+    b.style.animationDelay = (Math.random()*0.6).toFixed(2)+'s';
+    b.style.animationDuration = (0.3+Math.random()*0.4).toFixed(2)+'s';
+    npEq.appendChild(b);
+}
+
+function renderStations() {
+    stationListEl.innerHTML = '';
+    STATIONS.forEach((s, i) => {
+        if (activeFilter !== 'All' && s.genre !== activeFilter) return;
+        const row = document.createElement('div');
+        row.className = 'station-row' + (i === currentStationIdx ? ' active' : '');
+        row.dataset.idx = i;
+        const gc = GENRE_COLORS[s.genre] || '#666';
+        row.innerHTML = `<div class="st-freq">${s.freq}</div>
+            <div class="st-info"><div class="st-name">${s.name}</div><div class="st-meta">${s.city}</div></div>
+            <div class="st-genre" style="color:${gc};border:1px solid ${gc}33">${s.genre}</div>
+            <div class="st-playing"><i class="fas fa-volume-high"></i></div>`;
+        row.addEventListener('click', () => playStation(i));
+        stationListEl.appendChild(row);
+    });
+}
+renderStations();
+
+function forceHttps(url) {
+    return url ? url.replace(/^http:\/\//i, 'https://') : url;
+}
+
+async function resolveStreamUrl(station) {
+    const key = station.call;
+    if (streamCache[key]) return streamCache[key];
+    try {
+        const resp = await fetch(`https://de1.api.radio-browser.info/json/stations/search?name=${encodeURIComponent(station.call)}&countrycode=US&limit=10&order=clickcount&reverse=true`, {
+            headers: { 'User-Agent': 'tcp_radio/1.0' }
+        });
+        const data = await resp.json();
+        let match = data.find(d => d.url_resolved && d.name.toUpperCase().includes(station.call.toUpperCase()));
+        if (!match) match = data.find(d => d.url_resolved);
+        if (match && match.url_resolved) {
+            streamCache[key] = forceHttps(match.url_resolved);
+            return streamCache[key];
+        }
+        const resp2 = await fetch(`https://de1.api.radio-browser.info/json/stations/search?name=${encodeURIComponent(station.name.replace(/[^\w\s.]/g,''))}&countrycode=US&limit=10&order=clickcount&reverse=true`);
+        const data2 = await resp2.json();
+        const match2 = data2.find(d => d.url_resolved);
+        if (match2 && match2.url_resolved) {
+            streamCache[key] = forceHttps(match2.url_resolved);
+            return streamCache[key];
+        }
+    } catch (e) { console.error('Stream lookup failed:', e); }
+    return null;
+}
+
+async function playStation(idx) {
+    if (embedMode) {
+        embedFrame.src = 'about:blank';
+        embedMode = false;
+        playerView.classList.remove('active');
+        homeView.style.display = 'flex';
+    }
+
+    const prev = currentStationIdx;
+    currentStationIdx = idx;
+    const station = STATIONS[idx];
+
+    document.querySelectorAll('.station-row').forEach(r => {
+        r.classList.toggle('active', parseInt(r.dataset.idx) === idx);
+    });
+    const activeRow = stationListEl.querySelector(`.station-row[data-idx="${idx}"]`);
+    if (activeRow) activeRow.classList.add('loading');
+
+    updateNowPlaying(station, true);
+
+    const url = await resolveStreamUrl(station);
+    if (activeRow) activeRow.classList.remove('loading');
+
+    if (!url) {
+        updateNowPlaying(station, false, 'Stream not found');
+        return;
+    }
+
+    nuiPost('playStream', { url });
+    isPlaying = true;
+    updateNowPlaying(station, true);
+}
+
+function updateNowPlaying(station, playing, error) {
+    npBar.classList.add('visible');
+    npBar.classList.toggle('paused', !playing);
+    document.getElementById('np-name').textContent = error || station.name;
+    document.getElementById('np-detail').textContent = error ? '' : `${station.freq} · ${station.city} · ${station.genre}`;
+    document.querySelector('#np-play i').className = playing ? 'fas fa-pause' : 'fas fa-play';
+}
+
+function togglePlayPause() {
+    if (embedMode) return;
+    if (currentStationIdx < 0) return;
+    if (isPlaying) {
+        nuiPost('stopStream');
+        isPlaying = false;
+    } else {
+        const station = STATIONS[currentStationIdx];
+        const url = streamCache[station.call];
+        if (url) nuiPost('playStream', { url });
+        isPlaying = true;
+    }
+    npBar.classList.toggle('paused', !isPlaying);
+    document.querySelector('#np-play i').className = isPlaying ? 'fas fa-pause' : 'fas fa-play';
+}
+
+function prevStation() {
+    if (currentStationIdx <= 0) return;
+    const visible = getVisibleIndices();
+    const cur = visible.indexOf(currentStationIdx);
+    if (cur > 0) playStation(visible[cur - 1]);
+}
+function nextStation() {
+    const visible = getVisibleIndices();
+    const cur = visible.indexOf(currentStationIdx);
+    if (cur < visible.length - 1) playStation(visible[cur + 1]);
+}
+function getVisibleIndices() {
+    return STATIONS.map((s,i) => (activeFilter === 'All' || s.genre === activeFilter) ? i : -1).filter(i => i >= 0);
+}
+
+document.getElementById('np-play').addEventListener('click', (e) => { e.stopPropagation(); togglePlayPause(); });
+document.getElementById('np-prev').addEventListener('click', (e) => { e.stopPropagation(); prevStation(); });
+document.getElementById('np-next').addEventListener('click', (e) => { e.stopPropagation(); nextStation(); });
+
+const YT_AUDIO_API = 'https://mdc.zestyy.dev/api/yt-audio';
+
+async function resolveYouTubeAudio(videoId) {
+    try {
+        const resp = await fetch(`${YT_AUDIO_API}?v=${encodeURIComponent(videoId)}`, { signal: AbortSignal.timeout(20000) });
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        if (data.url) return { url: data.url, title: data.title || 'YouTube' };
+    } catch (e) { console.error('YT audio resolve failed:', e); }
+    return null;
+}
+
+async function parseAndPlay(rawUrl) {
+    const url = rawUrl.trim();
+    if (!url) return;
+    nuiPost('stopStream');
+    isPlaying = false;
+    currentStationIdx = -1;
+    embedMode = false;
+
+    // YouTube video
+    const ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/))([a-zA-Z0-9_-]{11})/);
+    if (ytMatch) {
+        updateNowPlayingCustom('YouTube', 'Resolving audio...', false);
+        const result = await resolveYouTubeAudio(ytMatch[1]);
+        if (result && result.url) {
+            nuiPost('playStream', { url: result.url });
+            isPlaying = true;
+            updateNowPlayingCustom(result.title, 'YouTube', true);
+        } else {
+            updateNowPlayingCustom('YouTube', 'Could not extract audio', false);
+        }
+        return;
+    }
+
+    // SoundCloud
+    if (url.includes('soundcloud.com/')) {
+        embedMode = true;
+        showEmbed(`https://w.soundcloud.com/player/?url=${encodeURIComponent(url)}&color=%233b9dff&auto_play=true&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false&visual=true`, 'SoundCloud');
+        return;
+    }
+
+    // Spotify
+    const spMatch = url.match(/open\.spotify\.com\/(track|album|playlist|episode|show)\/([a-zA-Z0-9]+)/);
+    if (spMatch) {
+        embedMode = true;
+        showEmbed(`https://open.spotify.com/embed/${spMatch[1]}/${spMatch[2]}?utm_source=generator&theme=0`, 'Spotify');
+        return;
+    }
+    const spUri = url.match(/spotify:(track|album|playlist|episode|show):([a-zA-Z0-9]+)/);
+    if (spUri) {
+        embedMode = true;
+        showEmbed(`https://open.spotify.com/embed/${spUri[1]}/${spUri[2]}?utm_source=generator&theme=0`, 'Spotify');
+        return;
+    }
+
+    // Direct stream URL
+    nuiPost('playStream', { url: forceHttps(url) });
+    isPlaying = true;
+    updateNowPlayingCustom('Stream', url.substring(0, 50), true);
+}
+
+function updateNowPlayingCustom(name, detail, playing) {
+    npBar.classList.add('visible');
+    npBar.classList.toggle('paused', !playing);
+    document.getElementById('np-name').textContent = name;
+    document.getElementById('np-detail').textContent = detail;
+    document.querySelector('#np-play i').className = playing ? 'fas fa-pause' : 'fas fa-play';
+}
+
+function showEmbed(src, label) {
+    homeView.style.display = 'none';
+    playerView.classList.add('active');
+    document.getElementById('pv-label').textContent = label;
+    embedFrame.src = src;
+    currentStationIdx = -1;
+    npBar.classList.remove('visible');
+}
+
+document.getElementById('url-go').addEventListener('click', () => parseAndPlay(urlInput.value));
+urlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') parseAndPlay(urlInput.value); });
+document.getElementById('back-btn').addEventListener('click', () => {
+    embedFrame.src = 'about:blank'; embedMode = false;
+    playerView.classList.remove('active'); homeView.style.display = 'flex';
+});
+
+// Volume buttons
+btnVolUp.addEventListener('click', () => {
+    radioVolume = Math.min(1, radioVolume + 0.1);
+    nuiPost('setVolume', { volume: radioVolume });
+});
+btnVolDn.addEventListener('click', () => {
+    radioVolume = Math.max(0, radioVolume - 0.1);
+    nuiPost('setVolume', { volume: radioVolume });
+});
+
+// Power: toggles screen + audio
+btnPower.addEventListener('click', () => {
+    screenOn = !screenOn;
+    screen.classList.toggle('on', screenOn);
+    if (!screenOn) {
+        nuiPost('stopStream');
+        isPlaying = false; embedFrame.src = 'about:blank'; embedMode = false;
+        currentStationIdx = -1; npBar.classList.remove('visible');
+        playerView.classList.remove('active'); homeView.style.display = 'flex';
+        document.querySelectorAll('.station-row').forEach(r => r.classList.remove('active'));
+    }
+});
+
+// Positioning
+function positionHotspots() {
+    const w = img.offsetWidth, h = img.offsetHeight;
+    if (!w || !h) return;
+    var bw = Math.round(w * 0.045), bh = Math.round(h * 0.09);
+    btnPower.style.left = Math.round(w * 0.032 - bw / 9) + 'px';
+    btnPower.style.top = Math.round(h * 0.055 - bh / 9) + 'px';
+    btnPower.style.width = bw + 'px'; btnPower.style.height = bh + 'px'; btnPower.style.borderRadius = '4px';
+    // Volume + button (3rd from top on left strip)
+    var vbw = Math.round(w * 0.045), vbh = Math.round(h * 0.10);
+    btnVolUp.style.left = Math.round(w * 0.032 - vbw / 9) + 'px';
+    btnVolUp.style.top = Math.round(h * 0.27) + 'px';
+    btnVolUp.style.width = vbw + 'px';
+    btnVolUp.style.height = vbh + 'px';
+    btnVolUp.style.borderRadius = '4px';
+
+    // Volume - button (5th from top, below mic)
+    btnVolDn.style.left = Math.round(w * 0.032 - vbw / 9) + 'px';
+    btnVolDn.style.top = Math.round(h * 0.58) + 'px';
+    btnVolDn.style.width = vbw + 'px';
+    btnVolDn.style.height = vbh + 'px';
+    btnVolDn.style.borderRadius = '4px';
+
+    screen.style.left = Math.round(w * 0.075) + 'px';
+    screen.style.top = Math.round(h * 0.06 - 10) + 'px';
+    screen.style.width = Math.round(w * 0.895 + 2) + 'px';
+    screen.style.height = Math.round(h * 0.88 + 20) + 'px';
+}
+img.addEventListener('load', positionHotspots);
+new ResizeObserver(positionHotspots).observe(img);
+
+// Dragging
+let isDragging = false, offsetX = 0, offsetY = 0;
+radio.addEventListener('mousedown', (e) => {
+    if (e.target.closest('.hotspot, button, .station-row, .tab, .url-bar, .np-bar, iframe')) return;
+    isDragging = true; radio.classList.add('dragging');
+    const rect = radio.getBoundingClientRect();
+    offsetX = e.clientX - rect.left; offsetY = e.clientY - rect.top;
+    radio.style.transform = 'none';
+});
+document.addEventListener('mousemove', (e) => { if (!isDragging) return; radio.style.left=(e.clientX-offsetX)+'px'; radio.style.top=(e.clientY-offsetY)+'px'; });
+document.addEventListener('mouseup', () => { isDragging = false; radio.classList.remove('dragging'); });
+
+// Hide UI only (music keeps playing), release NUI focus
+function hideRadio() {
+    radio.style.display = 'none';
+    nuiPost('close');
+}
+
+window.addEventListener('message', (e) => {
+    if (e.data.type === 'toggle') {
+        radio.style.display = e.data.show ? 'block' : 'none';
+        if (e.data.show) positionHotspots();
+    }
+});
+
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideRadio(); });
+</script>
+</body>
+</html>

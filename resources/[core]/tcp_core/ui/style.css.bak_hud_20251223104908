@@ -1,0 +1,174 @@
+body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+    font-family: 'Oswald', sans-serif;
+    text-transform: uppercase;
+    user-select: none;
+}
+
+#hud-container {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+}
+
+/* Shared Stack Properties */
+.tilted-stack {
+    position: absolute;
+    bottom: 3.5vh;
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 0.2vh;
+    transform-origin: bottom;
+}
+
+.hud-line {
+    color: white;
+    font-size: 1.8vh;
+    letter-spacing: 0.05em;
+    background: transparent;
+    text-shadow: 
+        2px 2px 0px rgba(0, 0, 0, 0.8),
+        0 0 8px rgba(255, 255, 255, 0.2); 
+}
+
+.label {
+    color: #aaaaaa;
+    font-weight: 500;
+}
+
+.label-icon {
+    color: #aaaaaa;
+    margin: 0 0.3vh;
+    font-size: 0.9em;
+    filter: drop-shadow(2px 2px 0px rgba(0,0,0,0.8));
+}
+
+/* Specific Stacks */
+#info-stack {
+    left: 17.5vw;
+    align-items: flex-start;
+}
+
+.no-tilt {
+    transform: none;
+}
+
+#right-stack {
+    right: 2vw;
+    align-items: flex-end;
+}
+
+.inward-tilt {
+    transform: perspective(1000px) rotateX(15deg) rotateY(-15deg);
+}
+
+.right-align {
+    text-align: right;
+}
+
+/* Compass Box */
+#compass-box {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.2vh;
+    height: 2.2vh;
+    border: 1.5px solid rgba(255, 255, 255, 0.8);
+    background: rgba(0, 0, 0, 0.4);
+    margin-right: 0.5vh;
+    font-weight: 700;
+    font-size: 1.6vh;
+    border-radius: 2px;
+    vertical-align: middle;
+    line-height: 0;
+}
+
+.large-text {
+    font-size: 2.2vh;
+    font-weight: 700;
+}
+
+/* Vehicle HUD Group */
+#vehicle-hud-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3vh;
+    max-height: 0;
+    opacity: 0;
+    margin-bottom: 0;
+    overflow: hidden;
+    transition: max-height 0.5s ease-in-out, opacity 0.4s ease-in-out, margin-bottom 0.5s ease-in-out;
+}
+
+#vehicle-hud-group.active {
+    max-height: 12vh;
+    opacity: 1;
+    margin-bottom: 0.8vh;
+}
+
+#speedometer {
+    font-weight: 700;
+    width: 8vw;
+    display: inline-block;
+}
+
+#speedometer.speed-high {
+    color: #ff3333;
+    text-shadow: 0 0 10px rgba(255, 51, 51, 0.8);
+}
+
+#fuel-container {
+    width: 8vw;
+    height: 0.6vh;
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 2px;
+}
+
+#fuel-bar {
+    height: 100%;
+    width: 50%;
+    background-color: #ce9100;
+    transition: width 0.3s ease-out, background-color 0.3s;
+    border-radius: 2px;
+}
+
+#fuel-bar.fuel-low {
+    background-color: #ff3333 !important;
+    box-shadow: 0 0 8px rgba(255, 51, 51, 0.5);
+    animation: pulse 1s infinite alternate;
+}
+
+.electric #fuel-bar {
+    background-color: #148cff;
+}
+
+/* Status Icons */
+.status-icon {
+    font-size: 1.4vh;
+    color: rgba(255, 255, 255, 0.3);
+    transition: color 0.3s ease;
+}
+
+.status-active {
+    color: #ffffff;
+    text-shadow: 0 0 8px rgba(255, 255, 255, 0.6);
+}
+
+.status-warning {
+    color: #ffaa00;
+    text-shadow: 0 0 8px rgba(255, 170, 0, 0.6);
+}
+
+.status-danger {
+    color: #ff3333;
+    text-shadow: 0 0 8px rgba(255, 51, 51, 0.6);
+}
+
+@keyframes pulse {
+    from { opacity: 1; }
+    to { opacity: 0.6; }
+}

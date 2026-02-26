@@ -1,0 +1,238 @@
+body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+    font-family: 'Oswald', sans-serif;
+    text-transform: uppercase;
+    user-select: none;
+}
+
+:root {
+    --hud-size-scale: 1;
+    --hud-bottom: clamp(18px, 3.5vh, 48px);
+    --hud-left: clamp(200px, 17.5vw, 380px);
+    --hud-right: clamp(16px, 2vw, 48px);
+    --hud-gap: clamp(2px, 0.2vh, 6px);
+    --hud-font: clamp(14px, 1.8vh, 20px);
+    --hud-compass-size: clamp(18px, 2.2vh, 26px);
+    --hud-compass-font: clamp(13px, 1.6vh, 18px);
+    --hud-large-font: clamp(16px, 2.2vh, 24px);
+    --hud-gear-font: clamp(12px, 1.4vh, 16px);
+    --hud-status-icon: clamp(12px, 1.4vh, 16px);
+    --hud-fuel-icon: clamp(12px, 1.2vh, 16px);
+    --hud-bar-width: clamp(140px, 8vw, 220px);
+    --hud-bar-height: clamp(6px, 0.6vh, 10px);
+    --hud-fuel-gap: clamp(6px, 0.5vh, 10px);
+    --hud-status-gap: clamp(8px, 0.8vh, 14px);
+    --hud-status-top: clamp(2px, 0.2vh, 6px);
+    --hud-icon-margin: clamp(3px, 0.3vh, 6px);
+    --hud-compass-margin: clamp(6px, 0.5vh, 10px);
+    --hud-vehicle-gap: clamp(3px, 0.3vh, 8px);
+    --hud-vehicle-max-height: clamp(120px, 12vh, 190px);
+    --hud-vehicle-margin-bottom: clamp(8px, 0.8vh, 14px);
+    --hud-gear-margin-left: clamp(6px, 0.6vh, 12px);
+    --hud-gear-padding-y: clamp(1px, 0.1vh, 3px);
+    --hud-gear-padding-x: clamp(6px, 0.6vh, 12px);
+}
+
+#hud-container {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+}
+
+/* Shared Stack Properties */
+.tilted-stack {
+    position: absolute;
+    bottom: var(--hud-bottom);
+    display: flex;
+    flex-direction: column-reverse;
+    gap: calc(var(--hud-gap) * var(--hud-size-scale));
+    transform-origin: bottom;
+}
+
+.hud-line {
+    color: white;
+    font-size: calc(var(--hud-font) * var(--hud-size-scale));
+    letter-spacing: 0.05em;
+    background: transparent;
+    text-shadow: 
+        2px 2px 0px rgba(0, 0, 0, 0.8),
+        0 0 8px rgba(255, 255, 255, 0.2); 
+}
+
+.label {
+    color: #aaaaaa;
+    font-weight: 500;
+}
+
+.label-icon {
+    color: #aaaaaa;
+    margin: 0 var(--hud-icon-margin);
+    font-size: 0.85em;
+    filter: drop-shadow(2px 2px 0px rgba(0,0,0,0.8));
+}
+
+/* Specific Stacks */
+#info-stack {
+    left: var(--hud-left);
+    align-items: flex-start;
+    transform: perspective(1000px) rotateX(8deg) rotateY(8deg);
+}
+
+.no-tilt {
+    transform: none;
+}
+
+#right-stack {
+    right: var(--hud-right);
+    align-items: flex-end;
+}
+
+.inward-tilt {
+    transform: perspective(1000px) rotateX(8deg) rotateY(-8deg);
+}
+
+.right-align {
+    text-align: right;
+}
+
+#right-stack .hud-line {
+    letter-spacing: 0.03em;
+}
+
+#unit-container {
+    font-weight: 700;
+}
+
+/* Compass Box */
+#compass-box {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(var(--hud-compass-size) * var(--hud-size-scale));
+    height: calc(var(--hud-compass-size) * var(--hud-size-scale));
+    border: 1.5px solid rgba(255, 255, 255, 0.8);
+    background: rgba(0, 0, 0, 0.4);
+    margin-right: calc(var(--hud-compass-margin) * var(--hud-size-scale));
+    font-weight: 700;
+    font-size: calc(var(--hud-compass-font) * var(--hud-size-scale));
+    border-radius: 5px;
+    vertical-align: middle;
+    line-height: 0;
+}
+
+.large-text {
+    font-size: calc(var(--hud-large-font) * var(--hud-size-scale));
+    font-weight: 700;
+}
+
+/* Vehicle HUD Group */
+#vehicle-hud-group {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--hud-vehicle-gap) * var(--hud-size-scale));
+    max-height: 0;
+    opacity: 0;
+    margin-bottom: 0;
+    overflow: hidden;
+    transition: max-height 0.5s ease-in-out, opacity 0.4s ease-in-out, margin-bottom 0.5s ease-in-out;
+}
+
+#vehicle-hud-group.active {
+    max-height: calc(var(--hud-vehicle-max-height) * var(--hud-size-scale));
+    opacity: 1;
+    margin-bottom: calc(var(--hud-vehicle-margin-bottom) * var(--hud-size-scale));
+}
+
+#speedometer {
+    font-weight: 700;
+    width: calc(var(--hud-bar-width) * var(--hud-size-scale));
+    display: inline-block;
+}
+
+.gear-indicator {
+    margin-left: calc(var(--hud-gear-margin-left) * var(--hud-size-scale));
+    padding: calc(var(--hud-gear-padding-y) * var(--hud-size-scale)) calc(var(--hud-gear-padding-x) * var(--hud-size-scale));
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 5px;
+    font-size: calc(var(--hud-gear-font) * var(--hud-size-scale));
+    color: #e6e6e6;
+    background: rgba(0, 0, 0, 0.35);
+    letter-spacing: 0.08em;
+}
+
+#speedometer.speed-high {
+    color: #ff3333;
+    text-shadow: 0 0 10px rgba(255, 51, 51, 0.8);
+}
+
+#fuel-container {
+    width: calc(var(--hud-bar-width) * var(--hud-size-scale));
+    height: calc(var(--hud-bar-height) * var(--hud-size-scale));
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 2px;
+}
+
+#fuel-bar {
+    height: 100%;
+    width: 50%;
+    background-color: #ce9100;
+    transition: width 0.3s ease-out, background-color 0.3s;
+    border-radius: 2px;
+}
+
+#fuel-bar.fuel-low {
+    background-color: #ff3333 !important;
+    box-shadow: 0 0 8px rgba(255, 51, 51, 0.5);
+    animation: pulse 1s infinite alternate;
+}
+
+.electric #fuel-bar {
+    background-color: #148cff;
+}
+
+/* Status Icons */
+.status-icon {
+    font-size: calc(var(--hud-status-icon) * var(--hud-size-scale));
+    color: rgba(255, 255, 255, 0.3);
+    transition: color 0.3s ease;
+}
+
+.status-active {
+    color: #ffffff;
+    text-shadow: 0 0 8px rgba(255, 255, 255, 0.6);
+}
+
+.status-warning {
+    color: #ffaa00;
+    text-shadow: 0 0 8px rgba(255, 170, 0, 0.6);
+}
+
+.status-danger {
+    color: #ff3333;
+    text-shadow: 0 0 8px rgba(255, 51, 51, 0.6);
+}
+
+@keyframes pulse {
+    from { opacity: 1; }
+    to { opacity: 0.6; }
+}
+
+#fuel-wrapper {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--hud-fuel-gap) * var(--hud-size-scale));
+}
+
+#fuel-icon {
+    font-size: calc(var(--hud-fuel-icon) * var(--hud-size-scale));
+}
+
+#status-icons {
+    display: flex;
+    gap: calc(var(--hud-status-gap) * var(--hud-size-scale));
+    margin-top: calc(var(--hud-status-top) * var(--hud-size-scale));
+}

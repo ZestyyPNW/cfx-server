@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Primal Networks | Loading</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div id="youtube-container" class="youtube-container is-hidden">
+        <iframe id="youtube-frame" title="Loading Background Video" allow="autoplay; encrypted-media"></iframe>
+    </div>
+
+    <div class="video-container" id="video-container">
+        <video id="loading-video" autoplay loop muted playsinline preload="auto" webkit-playsinline>
+            <source src="yt_priv.mp4" type="video/mp4">
+        </video>
+    </div>
+    <div id="gallery-overlay" class="gallery-overlay"></div>
+    <div class="vignette"></div>
+
+    <main class="loading-container">
+        <section class="top-left" id="server-info-panel">
+            <div class="stat-box">
+                <span class="stat-label" id="label-players">Players</span>
+                <span class="stat-value" id="player-count">0/0</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label" id="label-status">Status</span>
+                <span class="stat-value online" id="server-status">Online</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label" id="label-ping">Ping</span>
+                <span class="stat-value" id="server-ping">-- ms</span>
+            </div>
+        </section>
+
+        <section class="top-right" id="social-profile-panel">
+            <div class="social-links" id="social-links">
+                <a id="discord-link" href="#" target="_blank" rel="noopener">Discord</a>
+                <a id="website-link" href="#" target="_blank" rel="noopener">Website</a>
+            </div>
+            <div class="user-profile" id="user-profile">
+                <img id="profile-avatar" src="https://cdn.discordapp.com/embed/avatars/0.png" alt="Profile Avatar">
+                <div class="profile-meta">
+                    <span class="profile-label">User</span>
+                    <span class="profile-name" id="profile-name">Connecting...</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="left-rail">
+            <button class="rail-btn active" data-section="news">News</button>
+            <button class="rail-btn" data-section="events">Events</button>
+            <button class="rail-btn" data-section="gallery">Gallery</button>
+        </section>
+
+        <section class="left-content" id="left-content"></section>
+
+        <section class="center-main">
+            <img src="logo.png" alt="Primal Networks" class="center-logo" id="center-logo">
+            <h1 class="server-title" id="server-title">PRIMAL NETWORKS</h1>
+            <p class="server-subtitle" id="server-subtitle">Modern Roleplay Framework</p>
+            <div class="progress-meta">
+                <span id="loading-label">Loading</span>
+                <span id="progress-percent">0%</span>
+            </div>
+            <div class="progress-wrapper">
+                <div class="progress-bar" id="progress-bar"></div>
+            </div>
+            <div class="status-text" id="status">INITIALIZING...</div>
+        </section>
+
+        <section class="bottom-bar">
+            <div class="tips-box" id="tips-panel">
+                <span class="tips-title">Tip</span>
+                <span class="tips-text" id="tip-text">Welcome to the server.</span>
+            </div>
+            <div class="media-controls" id="media-controls">
+                <button id="video-toggle" class="media-btn" title="Pause or play background video">
+                    <i class="fas fa-pause"></i>
+                </button>
+                <button id="video-mute" class="media-btn" title="Mute or unmute video">
+                    <i class="fas fa-volume-xmark"></i>
+                </button>
+                <button id="music-toggle" class="media-btn" title="Pause or play music">
+                    <i class="fas fa-music"></i>
+                </button>
+                <button id="music-next" class="media-btn" title="Next music track">
+                    <i class="fas fa-forward"></i>
+                </button>
+                <span class="track-title" id="track-title">Loading Mix</span>
+            </div>
+        </section>
+
+        <audio id="music-audio" preload="auto"></audio>
+    </main>
+
+    <script src="config.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

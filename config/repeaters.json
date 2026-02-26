@@ -1,0 +1,16 @@
+[
+	{
+		"name": "Sandy Shores Radio Association KT9SSA",
+		"location": {
+			"X": 1868.88,
+			"Y": 3712.58,
+			"Z": 135.38,
+			"IsNormalized": false,
+			"IsZero": false
+		},
+		"nac": "293",
+		"uplink": "146.040",
+		"downlink": "146.640",
+		"id": "1"
+	}
+]

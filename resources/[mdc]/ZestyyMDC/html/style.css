@@ -1,0 +1,91 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  font-family: Arial, sans-serif;
+}
+
+.hidden { display: none; }
+
+/* Ensure the hidden class wins against the #mdcRoot display rule */
+#mdcRoot.hidden { display: none; }
+
+#mdcRoot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(900px, 92vw);
+  height: min(580px, 84vh);
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  background: #111316;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+#topbar {
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #6a6a6a;
+  padding: 0;
+  user-select: none;
+  cursor: move;
+}
+
+#title {
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 0 12px;
+}
+
+#controls {
+  height: 100%;
+  display: flex;
+  align-items: stretch;
+}
+
+#controls button {
+  width: 46px;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+  border: 0;
+  border-radius: 0;
+  background: #4f89d5;
+  color: #fff;
+  font-size: 17px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#controls button:hover {
+  filter: brightness(1.08);
+}
+
+#mdcFrame {
+  flex: 1;
+  width: 100%;
+  border: 0;
+  background: #111;
+}
+
+#btnClose {
+  background: #c62828;
+}
+
+#btnClose:hover {
+  background: #d32f2f;
+}
+
+#resizeHandle {
+  display: none;
+}

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SimpleHUD</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="hud-container">
+        <!-- Left Side Stack -->
+        <div id="info-stack" class="tilted-stack no-tilt">
+            <!-- Vehicle Stats -->
+            <div id="vehicle-hud-group">
+                <div id="speedometer" class="hud-line">
+                    <i class="fas fa-gauge-high label-icon"></i>
+                    <span id="speed"></span>
+                    <span id="speed-unit" class="label">MPH</span>
+                    <span id="gear" class="gear-indicator">N</span>
+                </div>
+                <div id="fuel-wrapper" class="hud-line">
+                    <i id="fuel-icon" class="fas fa-gas-pump label-icon"></i>
+                    <div id="fuel-container">
+                        <div id="fuel-bar"></div>
+                    </div>
+                </div>
+                <!-- Status Icons -->
+                <div id="status-icons" class="hud-line">
+                    <i id="icon-engine" class="fas fa-car-battery status-icon"></i>
+                    <i id="icon-lights" class="fas fa-lightbulb status-icon"></i>
+                    <i id="icon-lock" class="fas fa-lock status-icon"></i>
+                </div>
+            </div>
+
+            <div id="ahead-container" class="hud-line">
+                <i class="fas fa-arrow-up label-icon"></i> <span id="ahead"></span> <span class="label">AHEAD</span>
+            </div>
+            <div id="block-container" class="hud-line">
+                <i class="fas fa-house label-icon"></i> <span class="label">BLOCK:</span> <span id="block"></span>
+            </div>
+            <div id="street-container" class="hud-line">
+                <span id="compass-box"><span id="compass"></span></span> <span id="street"></span>
+            </div>
+        </div>
+
+        <!-- Right Side Info -->
+        <div id="right-stack" class="tilted-stack inward-tilt">
+            <div id="unit-container" class="hud-line right-align" style="display: none;">
+                <span id="unit"></span> <span class="label">UNIT</span> <i class="fas fa-id-badge label-icon"></i>
+            </div>
+            <div id="unread-container" class="hud-line right-align" style="display: none;">
+                <span id="unread">0</span> <span class="label">MSGS</span> <i class="fas fa-envelope label-icon"></i>
+            </div>
+            <div id="waiting-container" class="hud-line right-align" style="display: none;">
+                <span id="waiting">0</span> <span id="waiting-label" class="label">WI</span> <i class="fas fa-bell label-icon"></i>
+            </div>
+            <div id="priority-container" class="hud-line right-align" style="display: none;">
+                <span class="label">PRIORITY:</span> <span id="priority"></span> <i class="fas fa-bullhorn label-icon"></i>
+            </div>
+            <div class="hud-line right-align">
+                <span id="time"></span> <i class="fas fa-clock label-icon"></i>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

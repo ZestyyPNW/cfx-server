@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZestyyMDC</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="mdc-window">
+        <header id="mdc-header">
+            <div class="header-info">
+                <i class="fas fa-shield-halved"></i>
+                <span class="title">LASD MOBILE DATA COMPUTER</span>
+            </div>
+            <div class="header-controls">
+                <button class="control-btn" id="reload-btn" title="Force Reload"><i class="fas fa-sync-alt"></i></button>
+                <button class="control-btn" id="minimize-btn" title="Minimize"><i class="fas fa-window-minimize"></i></button>
+                <button class="control-btn close" id="close-btn" title="Close"><i class="fas fa-times"></i></button>
+            </div>
+        </header>
+        <main id="mdc-main">
+            <div id="drag-overlay"></div>
+            <iframe id="mdc-frame" src="https://mdc.zestyy.dev" frameborder="0" allow="autoplay; camera; microphone"></iframe>
+        </main>
+    </div>
+    <div id="mdc-notify-root" aria-live="polite"></div>
+    <script src="script.js"></script>
+</body>
+</html>
