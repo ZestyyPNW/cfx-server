@@ -1,0 +1,802 @@
+SpawnedPeds = {}
+local MAX_PEDS = 20 -- Resource utilization threshold
+local FollowPeds = {} -- Table to track peds that should follow the player
+local SavedPresets = {} -- Table to store saved ped presets
+local PresetsFile = 'presets.json' -- File name for saved presets
+
+-- Notification helper to replace ox_lib
+function Notify(msg, type)
+    SetNotificationTextEntry('STRING')
+    AddTextComponentString(msg)
+    DrawNotification(false, true)
+end
+
+-- Spawn a ped at your current location
+RegisterCommand('spawnped', function(source, args)
+    -- Check resource utilization threshold
+    if #SpawnedPeds >= MAX_PEDS then
+        Notify("Cannot spawn more peds. Max limit reached (" .. MAX_PEDS .. ").")
+        return
+    end
+
+    local model = args[1] or 'a_m_m_skater_01'
+    local playerPed = PlayerPedId()
+    local coords = GetEntityCoords(playerPed)
+    local heading = GetEntityHeading(playerPed)
+
+    RequestModel(GetHashKey(model))
+    
+    -- Timeout implementation for model loading
+    local timeout = 0
+    while not HasModelLoaded(GetHashKey(model)) do
+        Wait(100)
+        timeout = timeout + 1
+        if timeout > 50 then -- 5 seconds timeout
+            Notify("Failed to load model: " .. model)
+            return
+         end
+     end
+end)
+
+-- Event to play emote on a specific ped (Called from Menu)
+AddEventHandler('ped-director:playEmoteOnPed', function(ped, emoteName)
+    local emoteData = GetEmote(emoteName)
+    if not emoteData then return end
+
+    RequestAnimDict(emoteData.dict)
+    local timeout = 0
+    while not HasAnimDictLoaded(emoteData.dict) and timeout < 50 do
+        Wait(100)
+        timeout = timeout + 1
+    end
+
+    if HasAnimDictLoaded(emoteData.dict) then
+        TaskPlayAnim(ped, emoteData.dict, emoteData.anim, 8.0, -8.0, -1, 1, 0, false, false, false)
+        Notify('Playing emote: ' .. emoteData.name)
+    else
+        Notify('Failed to load animation')
+    end
+end)
+
+-- Global function to toggle follow mode for a ped
+function TogglePedFollow(ped)
+    if FollowPeds[ped] then
+        FollowPeds[ped] = nil
+        ClearPedTasks(ped)
+        FreezeEntityPosition(ped, true) -- Re-freeze when stopping
+        Notify('Follow Stopped')
+    else
+        FollowPeds[ped] = true
+        FreezeEntityPosition(ped, false) -- Unfreeze to move
+        Notify('Follow Started')
+    end
+end
+
+-- Global function to set ped clothing
+function SetPedClothing(ped, componentId, drawableId, textureId)
+    SetPedComponentVariation(ped, componentId, drawableId, textureId, 0)
+end
+
+-- Global function to get max drawables for a component
+function GetMaxDrawables(ped, componentId)
+    return GetNumberOfPedDrawableVariations(ped, componentId)
+end
+
+-- Global function to get max textures for a component
+function GetMaxTextures(ped, componentId, drawableId)
+    return GetNumberOfPedTextureVariations(ped, componentId, drawableId)
+end
+
+-- Function to set walking style
+function SetPedWalkingStyle(ped, clipSet)
+    RequestClipSet(clipSet)
+    while not HasClipSetLoaded(clipSet) do
+        Wait(10)
+    end
+    SetPedMovementClipset(ped, clipSet, 1.0)
+    Notify("Walking style set: " .. clipSet)
+end
+
+-- Function to give weapon
+function GivePedWeapon(ped, weaponName)
+    local weaponHash = GetHashKey(weaponName)
+    GiveWeaponToPed(ped, weaponHash, 999, false, true)
+    Notify("Gave weapon: " .. weaponName)
+end
+
+-- Function to remove all weapons
+function RemoveAllPedWeapons(ped)
+    RemoveAllPedWeapons(ped, true)
+        Notify("All weapons removed.")
+end
+
+-- Function to save ped as preset
+function SavePedPreset(ped, presetName)
+    if not DoesEntityExist(ped) then
+        Notify("Invalid ped for preset.")
+        return false
+    end
+    
+    -- Get all ped data
+    local pedModel = GetEntityModel(ped)
+    local coords = GetEntityCoords(ped)
+    local heading = GetEntityHeading(ped)
+    
+    -- Get all clothing components with proper error checking
+    local clothing = {}
+    local components = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}
+    local validComponents = 0
+    
+    for _, compId in ipairs(components) do
+        local drawable = GetPedDrawableVariation(ped, compId)
+        local texture = GetPedTextureVariation(ped, compId)
+        local prop = GetPedPropIndex(ped, compId)
+        
+        -- Only save if data is valid
+        if drawable ~= -1 or texture ~= -1 or prop ~= -1 then
+            local compData = {}
+            
+            if drawable ~= -1 then
+                compData.drawable = drawable
+                compData.texture = texture
+                validComponents = validComponents + 1
+            end
+            
+            if prop ~= -1 then
+                compData.prop = prop
+                validComponents = validComponents + 1
+            end
+            
+            if compData.drawable or compData.prop then
+                clothing[compId] = compData
+            end
+        end
+    end
+    
+    -- Validate we actually got clothing data
+    if validComponents == 0 then
+        Notify("Failed to get ped clothing data. Preset not saved.")
+        return false
+    end
+    
+    -- Save preset data
+    SavedPresets[presetName] = {
+        model = pedModel,
+        coords = coords,
+        heading = heading,
+        clothing = clothing,
+        timestamp = GetGameTimer()
+    }
+    
+    Notify(("Preset '%s' saved with %d valid components!"):format(presetName, validComponents))
+    return true
+end
+
+-- Function to load ped from preset
+function LoadPedPreset(presetName)
+    local preset = SavedPresets[presetName]
+    if not preset then
+        Notify("Preset not found: " .. presetName)
+        return false
+    end
+    
+    local playerPed = PlayerPedId()
+    local playerCoords = GetEntityCoords(playerPed)
+    local playerHeading = GetEntityHeading(playerPed)
+    
+    -- Request ped model
+    local modelHash = preset.model
+    RequestModel(modelHash)
+    
+    local timeout = 0
+    while not HasModelLoaded(modelHash) and timeout < 50 do
+        Wait(100)
+        timeout = timeout + 1
+    end
+    
+    if not HasModelLoaded(modelHash) then
+        Notify("Failed to load preset model.")
+        return false
+    end
+    
+    -- Create ped
+    local ped = CreatePed(4, modelHash, playerCoords.x + 1.0, playerCoords.y, playerCoords.z - 1.0, playerHeading, false, true)
+    if not DoesEntityExist(ped) then
+        Notify("Failed to create ped from preset.")
+        return false
+    end
+    
+    -- Set ped properties
+    SetEntityAsMissionEntity(ped, true, true)
+    SetPedCanRagdoll(ped, false)
+    SetBlockingOfNonTemporaryEvents(ped, true)
+    
+    -- Apply clothing
+    if preset.clothing then
+        for compId, data in pairs(preset.clothing) do
+            if data.drawable ~= nil then
+                SetPedComponentVariation(ped, compId, data.drawable, data.texture or 0, 0)
+            end
+            if data.prop ~= nil then
+                SetPedPropIndex(ped, compId, data.prop, 0)
+            end
+        end
+    end
+    
+    -- Add to spawned peds table
+    table.insert(SpawnedPeds, ped)
+    
+    Notify("Loaded preset: " .. presetName)
+    return ped
+end
+
+-- Function to list saved presets
+function ListSavedPresets()
+    local presetNames = {}
+    for name, _ in pairs(SavedPresets) do
+        table.insert(presetNames, name)
+    end
+    
+    table.sort(presetNames)
+    
+    if #presetNames == 0 then
+        Notify("No saved presets found.")
+    else
+        Notify("Saved Presets:")
+        for i, name in ipairs(presetNames) do
+            Notify(("%d. %s"):format(i, name))
+        end
+    end
+end
+
+-- Function to make ped walk to waypoint
+function MakePedWalkToWaypoint(ped)
+    if IsWaypointActive() then
+        local waypointCoords = GetBlipInfoIdCoord(GetFirstBlipInfoId(8))
+        -- Z coord is usually 0 from blip, need ground z
+        local foundGround, zPos = GetGroundZFor_3dCoord(waypointCoords.x, waypointCoords.y, 1000.0, 0)
+        
+        if not foundGround then zPos = waypointCoords.z end -- Fallback
+        
+        FreezeEntityPosition(ped, false)
+        TaskGoToCoordAnyMeans(ped, waypointCoords.x, waypointCoords.y, zPos, 1.0, 0, 0, 786603, 0xbf800000)
+        Notify("Walking to waypoint...")
+    else
+        Notify("No waypoint set!")
+    end
+end
+
+-- Helper: Snap Ped to Ground
+function SnapPedToGround(ped)
+    local coords = GetEntityCoords(ped)
+    local foundGround, zPos = GetGroundZFor_3dCoord(coords.x, coords.y, coords.z + 10.0, 0)
+    if foundGround then
+        SetEntityCoords(ped, coords.x, coords.y, zPos, false, false, false, true)
+        Notify("Snapped to ground.")
+    else
+        -- Try higher up
+        foundGround, zPos = GetGroundZFor_3dCoord(coords.x, coords.y, coords.z + 500.0, 0)
+        if foundGround then
+            SetEntityCoords(ped, coords.x, coords.y, zPos, false, false, false, true)
+            Notify("Snapped to ground (from height).")
+        else
+            Notify("Could not find ground.")
+        end
+    end
+end
+
+-- Helper: Adjust Ped Offset (Position & Heading)
+function AdjustPedOffset(ped, xOff, yOff, zOff, headingOff)
+    if not DoesEntityExist(ped) then return end
+    
+    -- Heading
+    if headingOff ~= 0.0 then
+        local currentHeading = GetEntityHeading(ped)
+        SetEntityHeading(ped, currentHeading + headingOff)
+    end
+    
+    -- Position (Relative to ped)
+    if xOff ~= 0.0 or yOff ~= 0.0 or zOff ~= 0.0 then
+        local offset = GetOffsetFromEntityInWorldCoords(ped, xOff, yOff, zOff)
+        SetEntityCoords(ped, offset.x, offset.y, offset.z, false, false, false, true)
+    end
+end
+
+-- Thread to handle following logic
+CreateThread(function()
+    while true do
+        local sleep = 1000
+        local playerPed = PlayerPedId()
+        local playerCoords = GetEntityCoords(playerPed)
+
+        for ped, isFollowing in pairs(FollowPeds) do
+            if isFollowing and DoesEntityExist(ped) then
+                sleep = 200
+                local pedCoords = GetEntityCoords(ped)
+                local dist = #(playerCoords - pedCoords)
+
+                if dist > 2.0 then
+                    -- If far, run/walk to player
+                    TaskGoToEntity(ped, playerPed, -1, 1.5, 2.0, 1073741824.0, 0)
+                else
+                    -- If close, stop
+                    -- TaskStandStill(ped, 1000)
+                end
+            else
+                FollowPeds[ped] = nil -- Cleanup if ped deleted
+            end
+        end
+        Wait(sleep)
+    end
+end)
+
+-- Play rpemotes animation on nearest ped
+RegisterCommand('pedemote', function(source, args)
+    if #args < 1 then
+        Notify("Usage: /pedemote [emote name]\nExamples: dance, smoke, sitchair")
+        return
+    end
+
+    local emoteName = args[1]
+    local emoteData = GetEmote(emoteName)
+
+    if not emoteData then
+        Notify("Emote '" .. emoteName .. "' not found.")
+        return
+    end
+
+    local playerPed = PlayerPedId()
+    local playerCoords = GetEntityCoords(playerPed)
+    local closestPed = nil
+    local closestDist = 10.0
+
+    -- Cleanup invalid peds while iterating
+    local validPeds = {}
+    for _, ped in ipairs(SpawnedPeds) do
+        if DoesEntityExist(ped) then
+            table.insert(validPeds, ped)
+            local pedCoords = GetEntityCoords(ped)
+            local dist = #(playerCoords - pedCoords)
+            if dist < closestDist then
+                closestPed = ped
+                closestDist = dist
+            end
+        end
+    end
+    SpawnedPeds = validPeds -- Update main table
+
+    if closestPed then
+        TriggerEvent('ped-director:playEmoteOnPed', closestPed, emoteName)
+    else
+        Notify("No ped found nearby!")
+    end
+end)
+
+-- Save current ped as preset
+RegisterCommand('savepedpreset', function(source, args)
+    local presetName = args[1]
+    if not presetName or presetName == "" then
+        Notify("Usage: /savepedpreset [name]")
+        return
+    end
+    
+    -- Find nearest ped (same logic as other commands)
+    local playerPed = PlayerPedId()
+    local playerCoords = GetEntityCoords(playerPed)
+    local closestPed = nil
+    local closestDist = 10.0
+    
+    local validPeds = {}
+    for _, ped in ipairs(SpawnedPeds) do
+        if DoesEntityExist(ped) then
+            table.insert(validPeds, ped)
+            local pedCoords = GetEntityCoords(ped)
+            local dist = #(playerCoords - pedCoords)
+            if dist < closestDist then
+                closestPed = ped
+                closestDist = dist
+            end
+        end
+    end
+    
+    if closestPed then
+        SavePedPreset(closestPed, presetName)
+    else
+        Notify("No ped found nearby to save.")
+    end
+end, false)
+
+-- Load ped from preset
+RegisterCommand('loadpedpreset', function(source, args)
+    if not args[1] then
+        -- Show list of saved presets
+        ListSavedPresets()
+        Notify("Usage: /loadpedpreset [number] or /loadpedpreset [name]")
+        return
+    end
+    
+    -- Check if argument is a number
+    local presetIndex = tonumber(args[1])
+    if presetIndex then
+        -- Load by index number
+        local presetNames = {}
+        for name, _ in pairs(SavedPresets) do
+            table.insert(presetNames, name)
+        end
+        
+        -- Sort for consistent numbering
+        table.sort(presetNames)
+        
+        if presetNames[presetIndex] then
+            LoadPedPreset(presetNames[presetIndex])
+        else
+            Notify(("Invalid preset number. Available presets: 1-%d"):format(#presetNames))
+        end
+    else
+        -- Load by name
+        local presetName = args[1]
+        if SavedPresets[presetName] then
+            LoadPedPreset(presetName)
+        else
+            Notify("Preset not found: " .. presetName)
+        end
+    end
+end, false)
+
+-- List saved presets
+RegisterCommand('listpedpresets', function(source, args)
+    ListSavedPresets()
+end, false)
+
+-- Play animation on nearest ped using dict and anim
+RegisterCommand('pedanim', function(source, args)
+    if #args < 2 then
+        Notify("Usage: /pedanim [dict] [anim]")
+        return
+    end
+
+    local dict = args[1]
+    local anim = args[2]
+    local playerPed = PlayerPedId()
+    local playerCoords = GetEntityCoords(playerPed)
+    local closestPed = nil
+    local closestDist = 10.0
+
+    local validPeds = {}
+    for _, ped in ipairs(SpawnedPeds) do
+        if DoesEntityExist(ped) then
+            table.insert(validPeds, ped)
+            local pedCoords = GetEntityCoords(ped)
+            local dist = #(playerCoords - pedCoords)
+            if dist < closestDist then
+                closestPed = ped
+                closestDist = dist
+            end
+        end
+    end
+    SpawnedPeds = validPeds
+
+    if closestPed then
+        RequestAnimDict(dict)
+        
+        -- Timeout implementation for anim dict loading
+        local timeout = 0
+        while not HasAnimDictLoaded(dict) do
+            Wait(100)
+            timeout = timeout + 1
+            if timeout > 50 then -- 5 seconds timeout
+                 Notify("Failed to load animation dictionary: " .. dict)
+                return
+            end
+        end
+
+        TaskPlayAnim(closestPed, dict, anim, 8.0, -8.0, -1, 1, 0, false, false, false)
+
+        Notify("Playing animation: " .. dict .. " - " .. anim)
+    else
+        Notify("No ped found nearby!")
+    end
+end)
+
+-- Play scenario on nearest ped
+RegisterCommand('pedscenario', function(source, args)
+    if #args < 1 then
+        Notify("Usage: /pedscenario [scenario]")
+        return
+    end
+
+    local scenario = string.upper(args[1])
+    local playerPed = PlayerPedId()
+    local playerCoords = GetEntityCoords(playerPed)
+    local closestPed = nil
+    local closestDist = 10.0
+
+    local validPeds = {}
+    for _, ped in ipairs(SpawnedPeds) do
+        if DoesEntityExist(ped) then
+            table.insert(validPeds, ped)
+            local pedCoords = GetEntityCoords(ped)
+            local dist = #(playerCoords - pedCoords)
+            if dist < closestDist then
+                closestPed = ped
+                closestDist = dist
+            end
+        end
+    end
+    SpawnedPeds = validPeds
+
+    if closestPed then
+        TaskStartScenarioInPlace(closestPed, scenario, 0, true)
+        Notify("Playing scenario: " .. scenario)
+    else
+        Notify("No ped found nearby!")
+    end
+end)
+
+-- Delete nearest ped
+RegisterCommand('deleteped', function()
+    local playerPed = PlayerPedId()
+    local playerCoords = GetEntityCoords(playerPed)
+    local closestPed = nil
+    local closestDist = 5.0
+    local closestIndex = nil
+
+    local validPeds = {}
+    for i, ped in ipairs(SpawnedPeds) do
+        if DoesEntityExist(ped) then
+            table.insert(validPeds, ped)
+            local pedCoords = GetEntityCoords(ped)
+            local dist = #(playerCoords - pedCoords)
+            if dist < closestDist then
+                closestPed = ped
+                closestDist = dist
+                closestIndex = #validPeds -- It's the last one added to validPeds
+            end
+        end
+    end
+    SpawnedPeds = validPeds
+
+    if closestPed then
+        DeleteEntity(closestPed)
+        if closestIndex then
+            table.remove(SpawnedPeds, closestIndex)
+        end
+        Notify("Deleted ped (Remaining: " .. #SpawnedPeds .. ")")
+    else
+        Notify("No ped found nearby!")
+    end
+end)
+
+-- Clear all spawned peds
+RegisterCommand('clearallpeds', function()
+    local count = 0
+    for _, ped in ipairs(SpawnedPeds) do
+        if DoesEntityExist(ped) then
+            DeleteEntity(ped)
+            count = count + 1
+        end
+    end
+    SpawnedPeds = {}
+    Notify("Deleted " .. count .. " peds")
+end)
+
+-- Freeze/Unfreeze nearest ped
+RegisterCommand('freezeped', function()
+    local playerPed = PlayerPedId()
+    local playerCoords = GetEntityCoords(playerPed)
+    local closestPed = nil
+    local closestDist = 5.0
+
+    local validPeds = {}
+    for _, ped in ipairs(SpawnedPeds) do
+        if DoesEntityExist(ped) then
+            table.insert(validPeds, ped)
+            local pedCoords = GetEntityCoords(ped)
+            local dist = #(playerCoords - pedCoords)
+            if dist < closestDist then
+                closestPed = ped
+                closestDist = dist
+            end
+        end
+    end
+    SpawnedPeds = validPeds
+
+    if closestPed then
+        local isFrozen = IsEntityPositionFrozen(closestPed)
+        FreezeEntityPosition(closestPed, not isFrozen)
+        Notify("Ped " .. (not isFrozen and "frozen" or "unfrozen"))
+    else
+        Notify("No ped found nearby!")
+    end
+end)
+
+-- Move ped to your location
+RegisterCommand('moveped', function()
+    local playerPed = PlayerPedId()
+    local playerCoords = GetEntityCoords(playerPed)
+    local heading = GetEntityHeading(playerPed)
+    local closestPed = nil
+    local closestDist = 50.0
+
+    local validPeds = {}
+    for _, ped in ipairs(SpawnedPeds) do
+        if DoesEntityExist(ped) then
+            table.insert(validPeds, ped)
+            local pedCoords = GetEntityCoords(ped)
+            local dist = #(playerCoords - pedCoords)
+            if dist < closestDist then
+                closestPed = ped
+                closestDist = dist
+            end
+        end
+    end
+    SpawnedPeds = validPeds
+
+    if closestPed then
+        SetEntityCoords(closestPed, playerCoords.x + 1.0, playerCoords.y, playerCoords.z - 1.0, false, false, false, true)
+        SetEntityHeading(closestPed, heading)
+        Notify("Moved ped to your location")
+    else
+        Notify("No ped found nearby!")
+    end
+end)
+
+-- Stop ped animation
+RegisterCommand('stopanimp', function()
+    local playerPed = PlayerPedId()
+    local playerCoords = GetEntityCoords(playerPed)
+    local closestPed = nil
+    local closestDist = 10.0
+
+    local validPeds = {}
+    for _, ped in ipairs(SpawnedPeds) do
+        if DoesEntityExist(ped) then
+            table.insert(validPeds, ped)
+            local pedCoords = GetEntityCoords(ped)
+            local dist = #(playerCoords - pedCoords)
+            if dist < closestDist then
+                closestPed = ped
+                closestDist = dist
+            end
+        end
+    end
+    SpawnedPeds = validPeds
+
+    if closestPed then
+        ClearPedTasks(closestPed)
+        Notify("Stopped ped animation")
+    else
+        Notify("No ped found nearby!")
+    end
+end)
+
+-- List available emotes
+RegisterCommand('listemotes', function()
+    -- Count total emotes
+    local count = 0
+    for _ in pairs(Emotes) do
+        count = count + 1
+    end
+
+    Notify("Total emotes available: " .. count)
+
+    TriggerEvent('chat:addMessage', {
+        color = {100, 200, 255},
+        multiline = true,
+        args = {"Popular Emotes", [[ 
+DANCE: dance, dance2, dance3, dance4, danceslow, dancesilly, djing
+SMOKE/DRINK: smoke, cigarette, cigar, drink, beer, coffee, wine
+PHONE: phone, phonecall, phonetext, text, selfie
+SIT: sit, sitchair, sit2, sitground, sitknees, sitdrunk, sitscared
+LEAN: lean, lean2, leanbar
+EMOTIONS: clap, slowclap, salute, wave, point, shrug, facepalm, cry
+POSES: crossarms, crossarms2, guard, clipboard, kneel
+ACTIONS: pushup, situp, yoga, stretch, camera, photo, film, fishing
+WORK: mechanic, workout, argue, cop, cop2, traffic, medic, type
+FUN: dab, thumbsup, peace, rock, nervous, flex, knock, rawr
+PARTY: djing, drinking, drinkwhiskey, moonwalk
+Try any emote name! Examples: cop3, smoke2, dance5, sitchair2, etc.
+        ]]}
+    })
+end)
+
+-- Save presets to file on resource stop
+AddEventHandler('onResourceStop', function(resourceName)
+    if GetCurrentResourceName() == resourceName then
+        -- Save SavedPresets to JSON file
+        local file = io.open('data/presets.json', 'w')
+        if file then
+            file:write(json.encode(SavedPresets))
+            file:close()
+            Notify('Presets saved to file.')
+        else
+            Notify('Failed to save presets file.')
+        end
+     return
+          end
+      end
+            else
+                Notify('No presets file found. Starting fresh.')
+            end
+        else
+            Notify('Failed to load presets file.')
+        end
+    end
+end)
+
+-- Help command
+RegisterCommand('peddirector', function()
+    TriggerEvent('chat:addMessage', {
+        color = {100, 200, 255},
+        multiline = true,
+        args = {"Ped Director - Commands", [[ 
+/spawnped [model] - Spawn a ped (default: skater)
+/pedemote [emote] - Play emote animation (1636 emotes!)
+/listemotes - Show popular emotes
+/pedanim [dict] [anim] - Play animation on nearest ped
+/pedscenario [scenario] - Play scenario on nearest ped
+/moveped - Move nearest ped to you
+/freezeped - Toggle freeze on nearest ped
+/stopanimp - Stop ped animation
+/deleteped - Delete nearest ped
+/clearallpeds - Delete all spawned peds
+
+Preset System:
+/savepedpreset [name] - Save nearest ped as preset with name
+/loadpedpreset [number] - Load preset by number from list
+/loadpedpreset [name] - Load preset by name
+/listpedpresets - Show numbered list of saved presets
+
+Menu:
+/pedmenu - Open GUI Menu
+
+Quick Example:
+/spawnped s_m_y_cop_01
+/pedemote guard
+/listemotes (940 emotes available!)
+/savepedpreset mycop
+/loadpedpreset mycop
+/listpedpresets
+        ]}})
+     })
+
+-- Debug command to inspect saved preset data
+RegisterCommand('inspectpreset', function(source, args)
+    local presetName = args[1]
+    if not presetName or presetName == "" then
+        Notify("Usage: /inspectpreset [name]")
+        return
+    end
+    
+    local preset = SavedPresets[presetName]
+    if not preset then
+        Notify("Preset not found: " .. presetName)
+        return
+    end
+    
+    Notify(("Preset: %s"):format(presetName))
+    Notify(("Model: %s"):format(preset.model))
+    Notify(("Coords: %.2f, %.2f, %.2f"):format(preset.coords.x, preset.coords.y, preset.coords.z))
+    Notify(("Components: %s"):format(json.encode(preset.clothing)))
+end, false)
+
+-- Debug command to inspect saved preset data
+RegisterCommand('inspectpreset', function(source, args)
+    local presetName = args[1]
+    if not presetName or presetName == "" then
+        Notify("Usage: /inspectpreset [name]")
+        return
+    end
+    
+    local preset = SavedPresets[presetName]
+    if not preset then
+        Notify("Preset not found: " .. presetName)
+        return
+    end
+    
+    Notify(("Preset: %s"):format(presetName))
+    Notify(("Model: %s"):format(preset.model))
+    Notify(("Coords: %.2f, %.2f, %.2f"):format(preset.coords.x, preset.coords.y, preset.coords.z))
+    Notify(("Components: %s"):format(json.encode(preset.clothing)))
+end, false)
+end)

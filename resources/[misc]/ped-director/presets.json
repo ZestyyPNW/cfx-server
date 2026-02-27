@@ -1,0 +1,370 @@
+{
+    "Sam": {
+        "model": 1885233650,
+        "heading": 304.5250244140625,
+        "coords": {
+            "z": 28.88224792480468,
+            "y": -1730.147705078125,
+            "x": 216.95895385742188
+        },
+        "timestamp": 1094763,
+        "clothing": {
+            "3": {
+                "texture": 0,
+                "drawable": 6
+            },
+            "2": {
+                "texture": 0,
+                "drawable": 83
+            },
+            "1": {
+                "texture": 3,
+                "drawable": 245
+            },
+            "0": {
+                "propTexture": 0,
+                "texture": 0,
+                "prop": 222,
+                "drawable": 0
+            },
+            "7": {
+                "texture": 0,
+                "drawable": 195
+            },
+            "6": {
+                "texture": 0,
+                "drawable": 103
+            },
+            "5": {
+                "texture": 0,
+                "drawable": 113
+            },
+            "4": {
+                "texture": 0,
+                "drawable": 204
+            },
+            "9": {
+                "texture": 0,
+                "drawable": 63
+            },
+            "8": {
+                "texture": 0,
+                "drawable": 235
+            },
+            "11": {
+                "texture": 0,
+                "drawable": 556
+            },
+            "10": {
+                "texture": 10,
+                "drawable": 211
+            }
+        }
+    },
+    "skater": {
+        "model": -640198516,
+        "heading": 0.54067301750183,
+        "coords": {
+            "z": 28.87375259399414,
+            "y": -1732.0819091796876,
+            "x": 214.19989013671876
+        },
+        "timestamp": 1005671,
+        "clothing": {
+            "3": {
+                "texture": 1,
+                "drawable": 0
+            },
+            "2": {
+                "texture": 1,
+                "drawable": 0
+            },
+            "1": {
+                "texture": 0,
+                "drawable": 0
+            },
+            "0": {
+                "texture": 2,
+                "drawable": 0
+            },
+            "7": {
+                "texture": 0,
+                "drawable": 0
+            },
+            "6": {
+                "texture": 0,
+                "drawable": 0
+            },
+            "5": {
+                "texture": 0,
+                "drawable": 0
+            },
+            "4": {
+                "texture": 0,
+                "drawable": 1
+            },
+            "9": {
+                "texture": 1,
+                "drawable": 0
+            },
+            "8": {
+                "texture": 0,
+                "drawable": 1
+            },
+            "11": {
+                "texture": 0,
+                "drawable": 0
+            },
+            "10": {
+                "texture": 0,
+                "drawable": 0
+            }
+        }
+    },
+    "chicano": {
+        "model": 1885233650,
+        "heading": 103.07454681396485,
+        "coords": {
+            "x": 26.0573558807373,
+            "y": -1618.98828125,
+            "z": 29.26859092712402
+        },
+        "timestamp": 532255,
+        "clothing": {
+            "1": {
+                "propTexture": 0,
+                "texture": 0,
+                "prop": 6,
+                "drawable": 0
+            },
+            "2": {
+                "drawable": 0,
+                "texture": 0
+            },
+            "3": {
+                "drawable": 15,
+                "texture": 0
+            },
+            "4": {
+                "drawable": 7,
+                "texture": 4
+            },
+            "5": {
+                "drawable": 0,
+                "texture": 0
+            },
+            "6": {
+                "drawable": 114,
+                "texture": 0
+            },
+            "7": {
+                "drawable": 0,
+                "texture": 0
+            },
+            "8": {
+                "drawable": 102,
+                "texture": 0
+            },
+            "9": {
+                "drawable": 0,
+                "texture": 0
+            },
+            "10": {
+                "drawable": 0,
+                "texture": 0
+            },
+            "11": {
+                "drawable": 127,
+                "texture": 0
+            },
+            "0": {
+                "drawable": 0,
+                "texture": 0
+            }
+        }
+    },
+    "ped": {
+        "model": 1885233650,
+        "heading": 37.9588623046875,
+        "coords": {
+            "z": 29.18429946899414,
+            "y": -1530.209716796875,
+            "x": 231.493896484375
+        },
+        "timestamp": 2231068,
+        "clothing": {
+            "3": {
+                "texture": 0,
+                "drawable": 0
+            },
+            "2": {
+                "texture": 0,
+                "drawable": 37
+            },
+            "1": {
+                "texture": 0,
+                "drawable": 0
+            },
+            "0": {
+                "propTexture": 0,
+                "texture": 0,
+                "prop": 14,
+                "drawable": 0
+            },
+            "7": {
+                "texture": 0,
+                "drawable": 0
+            },
+            "6": {
+                "texture": 0,
+                "drawable": 10
+            },
+            "5": {
+                "texture": 0,
+                "drawable": 0
+            },
+            "4": {
+                "texture": 0,
+                "drawable": 55
+            },
+            "9": {
+                "texture": 0,
+                "drawable": 0
+            },
+            "8": {
+                "texture": 0,
+                "drawable": 0
+            },
+            "11": {
+                "texture": 0,
+                "drawable": 15
+            },
+            "10": {
+                "texture": 0,
+                "drawable": 0
+            }
+        }
+    },
+    "asian": {
+        "model": 1885233650,
+        "heading": 170.08010864257813,
+        "coords": {
+            "z": 33.67436599731445,
+            "y": -1630.2340087890626,
+            "x": -237.1985626220703
+        },
+        "timestamp": 105611,
+        "clothing": {
+            "3": {
+                "texture": 0,
+                "drawable": 5
+            },
+            "2": {
+                "texture": 0,
+                "drawable": 0
+            },
+            "1": {
+                "texture": 0,
+                "drawable": 0
+            },
+            "0": {
+                "texture": 0,
+                "drawable": 39
+            },
+            "7": {
+                "texture": 0,
+                "drawable": 0
+            },
+            "6": {
+                "texture": 0,
+                "drawable": 0
+            },
+            "5": {
+                "texture": 0,
+                "drawable": 0
+            },
+            "4": {
+                "texture": 0,
+                "drawable": 12
+            },
+            "9": {
+                "texture": 0,
+                "drawable": 0
+            },
+            "8": {
+                "texture": 0,
+                "drawable": 15
+            },
+            "11": {
+                "texture": 0,
+                "drawable": 27
+            },
+            "10": {
+                "texture": 0,
+                "drawable": 0
+            }
+        }
+    },
+    "deputy": {
+        "model": 1885233650,
+        "heading": 356.77001953125,
+        "coords": {
+            "z": 33.11025238037109,
+            "y": -1670.3955078125,
+            "x": -205.48509216308598
+        },
+        "timestamp": 393866,
+        "clothing": {
+            "3": {
+                "texture": 0,
+                "drawable": 14
+            },
+            "2": {
+                "texture": 0,
+                "drawable": 83
+            },
+            "1": {
+                "texture": 2,
+                "drawable": 246
+            },
+            "0": {
+                "propTexture": 0,
+                "texture": 0,
+                "prop": 221,
+                "drawable": 0
+            },
+            "7": {
+                "texture": 0,
+                "drawable": 207
+            },
+            "6": {
+                "texture": 0,
+                "drawable": 51
+            },
+            "5": {
+                "texture": 0,
+                "drawable": 130
+            },
+            "4": {
+                "texture": 0,
+                "drawable": 205
+            },
+            "9": {
+                "texture": 0,
+                "drawable": 87
+            },
+            "8": {
+                "texture": 0,
+                "drawable": 271
+            },
+            "11": {
+                "texture": 0,
+                "drawable": 555
+            },
+            "10": {
+                "texture": 0,
+                "drawable": 0
+            }
+        }
+    }
+}
