@@ -80,6 +80,7 @@ local NudgeAmount = 0.1 -- Default nudge step
 local MovementModeRelative = true -- Toggle for relative vs world movement
 local PendingGoBack = false
 local KeepClothingCamThisFrame = false
+local menuResourceActive = true
 
 Emotes = Emotes or {}
 
@@ -208,7 +209,7 @@ end
 
 -- Main Loop
 Citizen.CreateThread(function()
-    while true do
+    while menuResourceActive do
         Citizen.Wait(0)
         KeepClothingCamThisFrame = false
 
@@ -828,7 +829,7 @@ end)
 
 -- Scene Director Submenus
 Citizen.CreateThread(function()
-    while true do
+    while menuResourceActive do
         Citizen.Wait(0)
 
         local success, err = pcall(function()
@@ -975,11 +976,7 @@ RegisterKeyMapping('pedmenu', 'Open Ped Director Menu', 'keyboard', 'F6')
 
 AddEventHandler("onClientResourceStop", function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
-    
-    -- Wrap in pcall to prevent crashes during shutdown
-    pcall(function()
-        if RageUI and RageUI.CloseAll then
-            RageUI.CloseAll()
-        end
-    end)
+
+    -- Stop menu loops immediately. Avoid RageUI native calls during unload.
+    menuResourceActive = false
 end)

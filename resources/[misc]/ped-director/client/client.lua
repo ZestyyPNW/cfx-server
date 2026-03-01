@@ -37,6 +37,9 @@ local IsPossessing = false
 local StageLights = {}
 local NextLightId = 1
 
+-- Global runtime flag for all loops/threads
+local isResourceActive = true
+
 -- Notification helper to replace ox_lib
 function Notify(msg, type)
     SetNotificationTextEntry('STRING')
@@ -123,76 +126,70 @@ CreateThread(function()
         
         if not GizmoActive then
             Wait(500)
-            goto continue
-        end
-        
-        if not GizmoPed or not DoesEntityExist(GizmoPed) then
+        elseif not GizmoPed or not DoesEntityExist(GizmoPed) then
             GizmoActive = false
             GizmoPed = nil
-            goto continue
-        end
-        
-        local success, err = pcall(function()
-            -- Instructions
-            local coords = GetEntityCoords(GizmoPed)
-            DrawText3D(coords.x, coords.y, coords.z + 1.2, "Gizmo Mode: " .. GizmoMode)
-            DrawText3D(coords.x, coords.y, coords.z + 1.1, "[W/A/S/D] Move  [Q/E] Height  [TAB] Mode  [ENTER] Save")
+        else
+            local success, err = pcall(function()
+                -- Instructions
+                local coords = GetEntityCoords(GizmoPed)
+                DrawText3D(coords.x, coords.y, coords.z + 1.2, "Gizmo Mode: " .. GizmoMode)
+                DrawText3D(coords.x, coords.y, coords.z + 1.1, "[W/A/S/D] Move  [Q/E] Height  [TAB] Mode  [ENTER] Save")
 
-            local speed = IsDisabledControlPressed(0, 21) and 0.01 or 0.05
-            if GizmoMode == "ROTATE" then speed = speed * 20.0 end
+                local speed = IsDisabledControlPressed(0, 21) and 0.01 or 0.05
+                if GizmoMode == "ROTATE" then speed = speed * 20.0 end
 
-            if GizmoMode == "MOVE" then
-                if IsDisabledControlPressed(0, 32) then -- W
-                    AdjustPedOffset(GizmoPed, 0.0, speed, 0.0, 0.0, false)
+                if GizmoMode == "MOVE" then
+                    if IsDisabledControlPressed(0, 32) then -- W
+                        AdjustPedOffset(GizmoPed, 0.0, speed, 0.0, 0.0, false)
+                    end
+                    if IsDisabledControlPressed(0, 33) then -- S
+                        AdjustPedOffset(GizmoPed, 0.0, -speed, 0.0, 0.0, false)
+                    end
+                    if IsDisabledControlPressed(0, 34) then -- A
+                        AdjustPedOffset(GizmoPed, -speed, 0.0, 0.0, 0.0, false)
+                    end
+                    if IsDisabledControlPressed(0, 30) then -- D
+                        AdjustPedOffset(GizmoPed, speed, 0.0, 0.0, 0.0, false)
+                    end
+                    if IsDisabledControlPressed(0, 44) then -- Q
+                        AdjustPedOffset(GizmoPed, 0.0, 0.0, speed, 0.0, false)
+                    end
+                    if IsDisabledControlPressed(0, 38) then -- E
+                        AdjustPedOffset(GizmoPed, 0.0, 0.0, -speed, 0.0, false)
+                    end
+                    DrawMarker(28, coords.x, coords.y, coords.z, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.5, 0.5, 0, 255, 0, 100, false, false, 2, nil, nil, false)
+                elseif GizmoMode == "ROTATE" then
+                    if IsDisabledControlPressed(0, 34) or IsDisabledControlPressed(0, 44) then
+                        AdjustPedOffset(GizmoPed, 0.0, 0.0, 0.0, speed, false)
+                    end
+                    if IsDisabledControlPressed(0, 30) or IsDisabledControlPressed(0, 38) then
+                        AdjustPedOffset(GizmoPed, 0.0, 0.0, 0.0, -speed, false)
+                    end
+                    local heading = GetEntityHeading(GizmoPed)
+                    local rad = math.rad(heading)
+                    local forwardX = -math.sin(rad) * 2.0
+                    local forwardY = math.cos(rad) * 2.0
+                    DrawLine(coords.x, coords.y, coords.z, coords.x + forwardX, coords.y + forwardY, coords.z, 255, 0, 0, 255)
                 end
-                if IsDisabledControlPressed(0, 33) then -- S
-                    AdjustPedOffset(GizmoPed, 0.0, -speed, 0.0, 0.0, false)
-                end
-                if IsDisabledControlPressed(0, 34) then -- A
-                    AdjustPedOffset(GizmoPed, -speed, 0.0, 0.0, 0.0, false)
-                end
-                if IsDisabledControlPressed(0, 30) then -- D
-                    AdjustPedOffset(GizmoPed, speed, 0.0, 0.0, 0.0, false)
-                end
-                if IsDisabledControlPressed(0, 44) then -- Q
-                    AdjustPedOffset(GizmoPed, 0.0, 0.0, speed, 0.0, false)
-                end
-                if IsDisabledControlPressed(0, 38) then -- E
-                    AdjustPedOffset(GizmoPed, 0.0, 0.0, -speed, 0.0, false)
-                end
-                DrawMarker(28, coords.x, coords.y, coords.z, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.5, 0.5, 0, 255, 0, 100, false, false, 2, nil, nil, false)
-            elseif GizmoMode == "ROTATE" then
-                if IsDisabledControlPressed(0, 34) or IsDisabledControlPressed(0, 44) then
-                    AdjustPedOffset(GizmoPed, 0.0, 0.0, 0.0, speed, false)
-                end
-                if IsDisabledControlPressed(0, 30) or IsDisabledControlPressed(0, 38) then
-                    AdjustPedOffset(GizmoPed, 0.0, 0.0, 0.0, -speed, false)
-                end
-                local heading = GetEntityHeading(GizmoPed)
-                local rad = math.rad(heading)
-                local forwardX = -math.sin(rad) * 2.0
-                local forwardY = math.cos(rad) * 2.0
-                DrawLine(coords.x, coords.y, coords.z, coords.x + forwardX, coords.y + forwardY, coords.z, 255, 0, 0, 255)
-            end
 
-            if IsDisabledControlJustPressed(0, 37) then -- TAB
-                if GizmoMode == "MOVE" then GizmoMode = "ROTATE" else GizmoMode = "MOVE" end
-            end
+                if IsDisabledControlJustPressed(0, 37) then -- TAB
+                    if GizmoMode == "MOVE" then GizmoMode = "ROTATE" else GizmoMode = "MOVE" end
+                end
 
-            if IsDisabledControlJustPressed(0, 191) or IsDisabledControlJustPressed(0, 18) then -- ENTER
+                if IsDisabledControlJustPressed(0, 191) or IsDisabledControlJustPressed(0, 18) then -- ENTER
+                    GizmoActive = false
+                    GizmoPed = nil
+                    Notify("Gizmo Mode Exited")
+                end
+            end)
+            
+            if not success then
+                print("[ped-director] Gizmo error: " .. tostring(err))
                 GizmoActive = false
                 GizmoPed = nil
-                Notify("Gizmo Mode Exited")
             end
-        end)
-        
-        if not success then
-            print("[ped-director] Gizmo error: " .. tostring(err))
-            GizmoActive = false
-            GizmoPed = nil
         end
-        
-        ::continue::
     end
 end)
 
@@ -698,7 +695,6 @@ function AdjustPedOffset(ped, xOff, yOff, zOff, headingOff, relative)
 end
 
 -- Thread to handle following logic
-local isResourceActive = true
 
 CreateThread(function()
     while isResourceActive do
@@ -1560,36 +1556,10 @@ Try any emote name! Examples: cop3, smoke2, dance5, sitchair2, etc.
     })
 end)
 
--- Save presets to file and cleanup on resource stop
+-- Keep stop handling lightweight. Heavy native cleanup during stop can crash clients.
 AddEventHandler('onResourceStop', function(resourceName)
-    if GetCurrentResourceName() == resourceName then
-        print('[ped-director] Resource stopping - cleaning up...')
-        
-        -- Stop the follow thread
-        isResourceActive = false
-        
-        -- Delete all spawned peds and their props
-        local count = 0
-        for _, ped in ipairs(SpawnedPeds) do
-            clearPedProps(ped)
-            if DoesEntityExist(ped) then
-                DeleteEntity(ped)
-                count = count + 1
-            end
-        end
-        
-        -- Clear tables
-        SpawnedPeds = {}
-        FollowPeds = {}
-        PedProps = {}
-        PedBehaviors = {}
-        PedFactionAssignments = {}
-        PatrolRouteNodes = {}
-        RelationshipGroups = {}
-        RelationshipGroupsInitialized = false
-        
-        print('[ped-director] Cleaned up ' .. count .. ' peds')
-    end
+    if GetCurrentResourceName() ~= resourceName then return end
+    isResourceActive = false
 end)
 
 -- Help command
@@ -2149,81 +2119,48 @@ CreateThread(function()
         
         if not IsPossessing then
             Wait(500) -- Longer wait when not possessing
-            goto continue
-        end
-        
-        if not PossessedPed or not DoesEntityExist(PossessedPed) then
+        elseif not PossessedPed or not DoesEntityExist(PossessedPed) then
             IsPossessing = false
-            goto continue
-        end
-        
-        -- Only process when actually possessing
-        local success, err = pcall(function()
-            -- Camera controls - only check every 100ms
-            if IsDisabledControlPressed(0, 32) then -- W
-                AdjustPedOffset(PossessedPed, 0.0, 0.1, 0.0, 0.0, false)
-            end
-            if IsDisabledControlPressed(0, 33) then -- S
-                AdjustPedOffset(PossessedPed, 0.0, -0.1, 0.0, 0.0, false)
-            end
-            if IsDisabledControlPressed(0, 34) then -- A
-                AdjustPedOffset(PossessedPed, -0.1, 0.0, 0.0, 0.0, false)
-            end
-            if IsDisabledControlPressed(0, 30) then -- D
-                AdjustPedOffset(PossessedPed, 0.1, 0.0, 0.0, 0.0, false)
-            end
+        else
+            -- Only process when actually possessing
+            local success, err = pcall(function()
+                -- Camera controls - only check every 100ms
+                if IsDisabledControlPressed(0, 32) then -- W
+                    AdjustPedOffset(PossessedPed, 0.0, 0.1, 0.0, 0.0, false)
+                end
+                if IsDisabledControlPressed(0, 33) then -- S
+                    AdjustPedOffset(PossessedPed, 0.0, -0.1, 0.0, 0.0, false)
+                end
+                if IsDisabledControlPressed(0, 34) then -- A
+                    AdjustPedOffset(PossessedPed, -0.1, 0.0, 0.0, 0.0, false)
+                end
+                if IsDisabledControlPressed(0, 30) then -- D
+                    AdjustPedOffset(PossessedPed, 0.1, 0.0, 0.0, 0.0, false)
+                end
 
-            -- Stop possess
-            if IsDisabledControlJustPressed(0, 191) then -- Enter
-                StopPossess()
-            end
-        end)
+                -- Stop possess
+                if IsDisabledControlJustPressed(0, 191) then -- Enter
+                    StopPossess()
+                end
+            end)
 
-        if not success then
-            print("[ped-director] Possess controls error: " .. tostring(err))
-            IsPossessing = false -- Stop possessing on error
+            if not success then
+                print("[ped-director] Possess controls error: " .. tostring(err))
+                IsPossessing = false -- Stop possessing on error
+            end
         end
-        
-        ::continue::
     end
 end)
 
 AddEventHandler("onClientResourceStop", function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
-    
-    print("[ped-director] Resource stopping - running cleanup...")
-    
-    -- Wrap all cleanup in pcall to prevent crashes during shutdown
-    local success, err = pcall(function()
-        -- Stop all threads
-        isResourceActive = false
-        
-        -- Clear cameras
-        ClearPedDirectorCamera()
-        
-        -- Clear possess camera if active
-        if PossessCamera then
-            pcall(function()
-                if DoesCamExist(PossessCamera) then
-                    SetCamActive(PossessCamera, false)
-                    DestroyCam(PossessCamera, false)
-                end
-            end)
-            PossessCamera = nil
-        end
-        
-        -- Stop possessing
-        IsPossessing = false
-        PossessedPed = nil
-        
-        -- Clear gizmo
-        GizmoActive = false
-        GizmoPed = nil
-    end)
-    
-    if not success then
-        print("[ped-director] Cleanup error during stop: " .. tostring(err))
-    end
-    
-    print("[ped-director] Cleanup complete")
+
+    -- Minimal shutdown path: stop loops and clear Lua references only.
+    -- Avoid camera/entity natives here; they can crash while runtime is unloading.
+    isResourceActive = false
+    IsPossessing = false
+    PossessedPed = nil
+    PossessCamera = nil
+    GizmoActive = false
+    GizmoPed = nil
 end)
