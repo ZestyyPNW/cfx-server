@@ -33,6 +33,10 @@ local PossessedPed = nil
 local PossessCamera = nil
 local IsPossessing = false
 
+-- Lighting state
+local StageLights = {}
+local NextLightId = 1
+
 -- Notification helper to replace ox_lib
 function Notify(msg, type)
     SetNotificationTextEntry('STRING')
@@ -1607,8 +1611,12 @@ Scene Director:
 /possess - Possess nearest ped with camera control
 /cloneped - Clone nearest ped
 /waypointall - Set same waypoint for all peds
+/teleportall - Teleport all peds to waypoint
 /emoteall [emote] - Apply emote to all peds
 /stopall - Stop animations for all peds
+/scenereset - Reset scene director state
+/addlight - Create stage light at current position
+/removelight [id] - Remove stage light (no id = clear all)
 
 Driving/Patrol:
 /pedvehicle [model] - Spawn vehicle and put nearest ped in driver seat
@@ -1785,6 +1793,63 @@ function ClonePed(ped)
     return clone
 end
 
+-- Lighting system
+function CreateStageLight(pos, color, intensity)
+    local lightId = NextLightId
+    NextLightId = NextLightId + 1
+
+    local light = {
+        id = lightId,
+        pos = pos,
+        color = color or {r = 255, g = 255, b = 255},
+        intensity = intensity or 1.0,
+        range = 20.0,
+        enabled = true
+    }
+
+    StageLights[lightId] = light
+
+    if light.enabled then
+        DRAW_LIGHT_WITH_RANGE(pos.x, pos.y, pos.z, light.color.r, light.color.g, light.color.b, light.range, intensity)
+    end
+
+    return lightId
+end
+
+function RemoveStageLight(lightId)
+    if StageLights[lightId] then
+        StageLights[lightId] = nil
+        Notify("Stage light removed")
+    end
+end
+
+function ToggleStageLight(lightId)
+    if StageLights[lightId] then
+        StageLights[lightId].enabled = not StageLights[lightId].enabled
+        Notify("Stage light " .. (StageLights[lightId].enabled and "enabled" or "disabled"))
+    end
+end
+
+function ClearAllStageLights()
+    StageLights = {}
+    NextLightId = 1
+    Notify("All stage lights cleared")
+end
+
+-- Update lights in a thread
+CreateThread(function()
+    while true do
+        Wait(100)
+        for _, light in pairs(StageLights) do
+            if light.enabled then
+                DRAW_LIGHT_WITH_RANGE(light.pos.x, light.pos.y, light.pos.z,
+                    light.color.r, light.color.g, light.color.b,
+                    light.range, light.intensity)
+            end
+        end
+    end
+end)
+
 -- Vehicle formations
 local IsChasingPlayer = false
 local IsEscortingPlayer = false
@@ -1939,6 +2004,62 @@ RegisterCommand('waypointall', function()
     Notify("Set waypoint for all peds")
 end)
 
+RegisterCommand('scenereset', function()
+    -- Reset scene director state
+    SceneMode = SCENE_MODE_SETUP
+    ActorSlots = {}
+    PedSlotAssignments = {}
+
+    -- Remove all slot blips
+    for slot, blip in pairs(SlotBlips) do
+        if DoesBlipExist(blip) then
+            RemoveBlip(blip)
+        end
+    end
+    SlotBlips = {}
+
+    -- Stop formations
+    StopVehicleFormations()
+
+    -- Clear all behaviors
+    for _, ped in ipairs(SpawnedPeds) do
+        if DoesEntityExist(ped) then
+            PedBehaviors[ped] = nil
+            clearPedProps(ped)
+            ClearPedTasks(ped)
+            FreezeEntityPosition(ped, true)
+        end
+    end
+
+    -- Stop possess if active
+    if IsPossessing then
+        StopPossess()
+    end
+
+    Notify("Scene director reset - all slots cleared, behaviors stopped")
+end)
+
+RegisterCommand('teleportall', function()
+    if not IsWaypointActive() then
+        Notify("No waypoint set")
+        return
+    end
+
+    local waypointCoords = GetBlipInfoIdCoord(GetFirstBlipInfoId(8))
+    local foundGround, zPos = GetGroundZFor_3dCoord(waypointCoords.x, waypointCoords.y, 1000.0, 0)
+    if foundGround then
+        waypointCoords = vector3(waypointCoords.x, waypointCoords.y, zPos)
+    end
+
+    for _, ped in ipairs(SpawnedPeds) do
+        if DoesEntityExist(ped) then
+            SetEntityCoords(ped, waypointCoords.x, waypointCoords.y, waypointCoords.z, false, false, false, true)
+        end
+    end
+
+    Notify("Teleported all peds to waypoint")
+end)
+
 RegisterCommand('pedchase', function()
     if IsChasingPlayer then
         StopVehicleFormations()
@@ -1952,6 +2073,23 @@ RegisterCommand('pedescort', function()
         StopVehicleFormations()
     else
         StartVehicleEscort()
+    end
+end)
+
+RegisterCommand('addlight', function()
+    local playerPed = PlayerPedId()
+    local pos = GetEntityCoords(playerPed)
+    pos = GetOffsetFromEntityInWorldCoords(playerPed, 0.0, 2.0, 0.0) -- In front
+    local lightId = CreateStageLight(pos)
+    Notify("Stage light created (ID: " .. lightId .. ")")
+end)
+
+RegisterCommand('removelight', function(source, args)
+    local lightId = tonumber(args[1])
+    if lightId then
+        RemoveStageLight(lightId)
+    else
+        ClearAllStageLights()
     end
 end)
 

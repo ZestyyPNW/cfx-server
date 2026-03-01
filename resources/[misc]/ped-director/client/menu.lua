@@ -834,6 +834,24 @@ Citizen.CreateThread(function()
                             ExecuteCommand('cloneped')
                         end
                     end)
+
+                    ItemsObject:AddButton("Reset Scene", "Clear all slots and behaviors", {RightLabel = "🔄"}, function(Selected, Active)
+                        if Selected then
+                            ExecuteCommand('scenereset')
+                        end
+                    end)
+
+                    ItemsObject:AddButton("Teleport All", "Move all peds to waypoint", {RightLabel = "📍"}, function(Selected, Active)
+                        if Selected then
+                            ExecuteCommand('teleportall')
+                        end
+                    end)
+
+                    ItemsObject:AddButton("Add Stage Light", "Create light at current position", {RightLabel = "💡"}, function(Selected, Active)
+                        if Selected then
+                            ExecuteCommand('addlight')
+                        end
+                    end)
                 end)
             end
 
@@ -903,6 +921,12 @@ Citizen.CreateThread(function()
                     ItemsObject:AddButton(escortText, "Vehicle escort mode", {RightLabel = "🚙"}, function(Selected, Active)
                         if Selected then
                             ExecuteCommand('pedescort')
+                        end
+                    end)
+
+                    ItemsObject:AddButton("Clear Stage Lights", "Remove all stage lights", {RightLabel = "🕯️"}, function(Selected, Active)
+                        if Selected then
+                            ExecuteCommand('removelight')
                         end
                     end)
                 end)
