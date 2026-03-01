@@ -1187,6 +1187,42 @@ CustomDP.Emotes = {
 }
 CustomDP.PropEmotes = {}
 
+local function AddBulkEmotesFromFile()
+    local resourceName = GetCurrentResourceName and GetCurrentResourceName()
+    if not resourceName then
+        return
+    end
+
+    local raw = LoadResourceFile(resourceName, "client/rpemotes/ped_director_bulk_anims.txt")
+    if type(raw) ~= "string" or raw == "" then
+        print("^3[ped-director]^7 No bulk emote file found at client/rpemotes/ped_director_bulk_anims.txt")
+        return
+    end
+
+    local added = 0
+    local rowIndex = 0
+    for line in string.gmatch(raw, "[^\r\n]+") do
+        local id, dict, clip, durationText = string.match(line, "^(%d+)%s+([^%s]+)%s+([^%s]+)%s+(-?%d+)$")
+        if id and dict and clip and durationText then
+            rowIndex = rowIndex + 1
+            local key = ("bulk_%05d"):format(rowIndex)
+            CustomDP.Emotes[key] = {
+                dict,
+                clip,
+                ("Bulk %s: %s %s"):format(id, dict, clip),
+                AnimationOptions = {
+                    EmoteDuration = tonumber(durationText) or -1
+                }
+            }
+            added = added + 1
+        end
+    end
+
+    print(("^2[ped-director]^7 Loaded %d bulk emotes from data file"):format(added))
+end
+
+AddBulkEmotesFromFile()
+
 -----------------------------------------------------------------------------------------
 --| I don't think you should change the code below unless you know what you are doing |--
 -----------------------------------------------------------------------------------------

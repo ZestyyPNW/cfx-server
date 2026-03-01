@@ -59,6 +59,9 @@ local function InitializeMenus()
     RMenu.Add('ped_director', 'emotes', RageUI.CreateSubMenu(RMenu:Get('ped_director', 'ped_options'), "Emotes", "Select an animation"))
     RMenu.Add('ped_director', 'walking_styles', RageUI.CreateSubMenu(RMenu:Get('ped_director', 'ped_options'), "Walking Styles", "Set movement style"))
     RMenu.Add('ped_director', 'weapons', RageUI.CreateSubMenu(RMenu:Get('ped_director', 'ped_options'), "Weapons", "Give weapon"))
+    RMenu.Add('ped_director', 'scene_director', RageUI.CreateSubMenu(RMenu:Get('ped_director', 'main'), "Scene Director", "Advanced scene control"))
+    RMenu.Add('ped_director', 'actor_slots', RageUI.CreateSubMenu(RMenu:Get('ped_director', 'scene_director'), "Actor Slots", "Manage actor assignments"))
+    RMenu.Add('ped_director', 'global_actions', RageUI.CreateSubMenu(RMenu:Get('ped_director', 'scene_director'), "Global Actions", "Apply to all peds"))
 end
 
 local SelectedPedIndex = nil
@@ -231,6 +234,9 @@ Citizen.CreateThread(function()
                             RefreshPedPresets()
                         end
                     end, RMenu:Get('ped_director', 'presets'))
+
+                    ItemsObject:AddButton("Scene Director", "Advanced scene control features", {RightLabel = "→"}, function(Selected, Active)
+                    end, RMenu:Get('ped_director', 'scene_director'))
                 end, function() end)
             end
 
@@ -789,6 +795,119 @@ RegisterCommand('pedmenu', function()
     local mainMenu = RMenu:Get('ped_director', 'main')
     if mainMenu then
         RageUI.Visible(mainMenu, not RageUI.Visible(mainMenu))
+    end
+end)
+
+-- Scene Director Submenus
+Citizen.CreateThread(function()
+    while true do
+        Citizen.Wait(0)
+
+        if RageUI and Items then
+            -- Scene Director Menu
+            local sceneDirectorMenu = RMenu:Get('ped_director', 'scene_director')
+            if sceneDirectorMenu then
+                sceneDirectorMenu:IsVisible(function(ItemsObject)
+                    ItemsObject = ItemsObject or Items
+
+                    local modeText = SceneMode == "setup" and "SETUP" or "ACTIVE"
+                    ItemsObject:AddButton("Scene Mode: " .. modeText, "Toggle between setup and active modes", {RightLabel = SceneMode == "setup" and "SETUP" or "ACTIVE"}, function(Selected, Active)
+                        if Selected then
+                            ExecuteCommand('scenemode')
+                        end
+                    end)
+
+                    ItemsObject:AddButton("Actor Slots", "Assign and manage ped slots", {RightLabel = "→"}, function(Selected, Active)
+                    end, RMenu:Get('ped_director', 'actor_slots'))
+
+                    ItemsObject:AddButton("Global Actions", "Apply actions to all peds", {RightLabel = "→"}, function(Selected, Active)
+                    end, RMenu:Get('ped_director', 'global_actions'))
+
+                    ItemsObject:AddButton("Possess Nearest", "Take control of nearest ped", {RightLabel = "👁️"}, function(Selected, Active)
+                        if Selected then
+                            ExecuteCommand('possess')
+                        end
+                    end)
+
+                    ItemsObject:AddButton("Clone Nearest", "Create a copy of nearest ped", {RightLabel = "📋"}, function(Selected, Active)
+                        if Selected then
+                            ExecuteCommand('cloneped')
+                        end
+                    end)
+                end)
+            end
+
+            -- Actor Slots Menu
+            local actorSlotsMenu = RMenu:Get('ped_director', 'actor_slots')
+            if actorSlotsMenu then
+                actorSlotsMenu:IsVisible(function(ItemsObject)
+                    ItemsObject = ItemsObject or Items
+
+                    for slot = 1, 9 do
+                        local ped = ActorSlots[slot]
+                        local label = "Slot " .. slot
+                        if ped and DoesEntityExist(ped) then
+                            label = label .. " (Occupied)"
+                        else
+                            label = label .. " (Empty)"
+                        end
+
+                        ItemsObject:AddButton(label, "Assign/swap to this slot", {RightLabel = ped and "SWAP" or "ASSIGN"}, function(Selected, Active)
+                            if Selected then
+                                if ped and DoesEntityExist(ped) then
+                                    ExecuteCommand('swapslot ' .. slot)
+                                else
+                                    ExecuteCommand('assignslot ' .. slot)
+                                end
+                            end
+                        end)
+                    end
+                end)
+            end
+
+            -- Global Actions Menu
+            local globalActionsMenu = RMenu:Get('ped_director', 'global_actions')
+            if globalActionsMenu then
+                globalActionsMenu:IsVisible(function(ItemsObject)
+                    ItemsObject = ItemsObject or Items
+
+                    ItemsObject:AddButton("Waypoint All", "Set same waypoint for all peds", {RightLabel = "📍"}, function(Selected, Active)
+                        if Selected then
+                            ExecuteCommand('waypointall')
+                        end
+                    end)
+
+                    ItemsObject:AddButton("Emote All", "Apply emote to all peds", {RightLabel = "💃"}, function(Selected, Active)
+                        if Selected then
+                            local emote = KeyboardInput("Enter Emote Name", "", 30)
+                            if emote then
+                                ExecuteCommand('emoteall ' .. emote)
+                            end
+                        end
+                    end)
+
+                    ItemsObject:AddButton("Stop All", "Stop animations for all peds", {RightLabel = "⏹️"}, function(Selected, Active)
+                        if Selected then
+                            ExecuteCommand('stopall')
+                        end
+                    end)
+
+                    local chaseText = IsChasingPlayer and "Stop Chase" or "Start Chase"
+                    ItemsObject:AddButton(chaseText, "Vehicle chase mode", {RightLabel = "🚗"}, function(Selected, Active)
+                        if Selected then
+                            ExecuteCommand('pedchase')
+                        end
+                    end)
+
+                    local escortText = IsEscortingPlayer and "Stop Escort" or "Start Escort"
+                    ItemsObject:AddButton(escortText, "Vehicle escort mode", {RightLabel = "🚙"}, function(Selected, Active)
+                        if Selected then
+                            ExecuteCommand('pedescort')
+                        end
+                    end)
+                end)
+            end
+        end
     end
 end)
 

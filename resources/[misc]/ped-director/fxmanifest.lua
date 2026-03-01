@@ -16,6 +16,7 @@ files {
     'stream/**/*.ytd',
     'client/rpemotes/AnimationList.lua',
     'client/rpemotes/AnimationListCustom.lua',
+    'client/rpemotes/ped_director_bulk_anims.txt',
     'presets.json'
 }
 

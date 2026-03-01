@@ -19,6 +19,20 @@ local GizmoActive = false
 local PedDirectorCamera = nil
 local PedDirectorCameraActive = false
 
+-- Scene Director enhancements
+local SCENE_MODE_SETUP = "setup"
+local SCENE_MODE_ACTIVE = "active"
+local SceneMode = SCENE_MODE_SETUP -- Current scene mode
+
+local ActorSlots = {} -- Slot 1-9 -> Ped
+local SlotBlips = {} -- Slot -> Blip ID
+local PedSlotAssignments = {} -- Ped -> Slot number
+
+-- Possess state
+local PossessedPed = nil
+local PossessCamera = nil
+local IsPossessing = false
+
 -- Notification helper to replace ox_lib
 function Notify(msg, type)
     SetNotificationTextEntry('STRING')
@@ -607,12 +621,25 @@ function MakePedWalkToWaypoint(ped)
         local waypointCoords = GetBlipInfoIdCoord(GetFirstBlipInfoId(8))
         -- Z coord is usually 0 from blip, need ground z
         local foundGround, zPos = GetGroundZFor_3dCoord(waypointCoords.x, waypointCoords.y, 1000.0, 0)
-        
+
         if not foundGround then zPos = waypointCoords.z end -- Fallback
-        
-        FreezeEntityPosition(ped, false)
-        TaskGoToCoordAnyMeans(ped, waypointCoords.x, waypointCoords.y, zPos, 1.0, 0, 0, 786603, 0xbf800000)
-        Notify("Walking to waypoint...")
+
+        if SceneMode == SCENE_MODE_SETUP then
+            -- Store waypoint for later execution
+            PedBehaviors[ped] = {
+                mode = "towp",
+                speed = 18.0,
+                drivingStyle = 786603,
+                lastTaskAt = GetGameTimer(),
+                arriveDistance = 8.0
+            }
+            Notify("Waypoint stored for ped (Setup Mode)")
+        else
+            -- Execute immediately
+            FreezeEntityPosition(ped, false)
+            TaskGoToCoordAnyMeans(ped, waypointCoords.x, waypointCoords.y, zPos, 1.0, 0, 0, 786603, 0xbf800000)
+            Notify("Walking to waypoint...")
+        end
     else
         Notify("No waypoint set!")
     end
@@ -850,7 +877,7 @@ local function getWaypointGroundedCoords()
     return vector3(wp.x, wp.y, wp.z)
 end
 
-local function ensurePedVehicle(ped, vehicleModel)
+function ensurePedVehicle(ped, vehicleModel)
     if IsPedInAnyVehicle(ped, false) then
         local vehicle = GetVehiclePedIsIn(ped, false)
         if GetPedInVehicleSeat(vehicle, -1) == ped then
@@ -1561,9 +1588,9 @@ RegisterCommand('peddirector', function()
     TriggerEvent('chat:addMessage', {
         color = {100, 200, 255},
         multiline = true,
-        args = {"Ped Director - Commands", [[ 
+        args = {"Ped Director - Scene Director Commands", [[
 /spawnped [model] - Spawn a ped (default: skater)
-/pedemote [emote] - Play emote animation (1636 emotes!)
+/pedemote [emote] - Play emote animation (1636+ emotes!)
 /listemotes - Show popular emotes
 /pedanim [dict] [anim] - Play animation on nearest ped
 /pedscenario [scenario] - Play scenario on nearest ped
@@ -1573,12 +1600,24 @@ RegisterCommand('peddirector', function()
 /deleteped - Delete nearest ped
 /clearallpeds - Delete all spawned peds
 
+Scene Director:
+/scenemode - Toggle between SETUP and ACTIVE scene modes
+/assignslot [1-9] - Assign nearest ped to slot
+/swapslot [1-9] - Swap to ped in slot (possess mode)
+/possess - Possess nearest ped with camera control
+/cloneped - Clone nearest ped
+/waypointall - Set same waypoint for all peds
+/emoteall [emote] - Apply emote to all peds
+/stopall - Stop animations for all peds
+
 Driving/Patrol:
 /pedvehicle [model] - Spawn vehicle and put nearest ped in driver seat
 /pedrouteadd - Add your current location as a patrol node
 /pedrouteclear - Clear all patrol route nodes
 /pedrouteinfo - Show patrol node count
 /peddrive [wander|towp|patrol|stop] [speed] - Set drive behavior
+/pedchase - Toggle vehicle chase mode (all peds chase player)
+/pedescort - Toggle vehicle escort mode (all peds escort player)
 
 Factions/Combat:
 /pedfaction [civilian|police|gang|guard] - Assign nearest ped faction profile
@@ -1593,21 +1632,215 @@ Preset System:
 Menu:
 /pedmenu - Open GUI Menu
 
-Quick Example:
+Quick Scene Example:
+/scenemode (set to SETUP)
 /spawnped s_m_y_cop_01
-/pedemote guard
-/pedvehicle police3
-/pedrouteadd
-/pedrouteadd
-/peddrive patrol 22
-/pedfaction police
-/listemotes (1636 emotes available!)
-/savepedpreset mycop
-/loadpedpreset mycop
-/listpedpresets
+/assignslot 1
+/spawnped a_m_m_skater_01
+/assignslot 2
+/waypointall (waypoint stored)
+/scenemode (set to ACTIVE - waypoints execute)
+/pedchase
         ]]}
     })
 end)
+
+-- Scene Director functions
+function ToggleSceneMode()
+    if SceneMode == SCENE_MODE_SETUP then
+        SceneMode = SCENE_MODE_ACTIVE
+        Notify("Scene mode: ACTIVE - Waypoints will execute immediately")
+        -- Trigger all stored waypoints
+        for slot, ped in pairs(ActorSlots) do
+            if PedBehaviors[ped] and PedBehaviors[ped].mode == "towp" then
+                issueBehaviorTask(ped, PedBehaviors[ped])
+            end
+        end
+    else
+        SceneMode = SCENE_MODE_SETUP
+        Notify("Scene mode: SETUP - Waypoints will be stored")
+    end
+end
+
+function AssignPedToSlot(slot, ped)
+    if slot < 1 or slot > 9 then return false end
+    if not DoesEntityExist(ped) then return false end
+
+    -- Remove from old slot
+    local oldSlot = PedSlotAssignments[ped]
+    if oldSlot then
+        ActorSlots[oldSlot] = nil
+        if SlotBlips[oldSlot] then
+            RemoveBlip(SlotBlips[oldSlot])
+            SlotBlips[oldSlot] = nil
+        end
+    end
+
+    -- Assign to new slot
+    ActorSlots[slot] = ped
+    PedSlotAssignments[ped] = slot
+
+    -- Create blip
+    local blip = AddBlipForEntity(ped)
+    SetBlipSprite(blip, 1)
+    SetBlipColour(blip, 1)
+    SetBlipScale(blip, 0.8)
+    BeginTextCommandSetBlipName("STRING")
+    AddTextComponentString("Slot " .. slot)
+    EndTextCommandSetBlipName(blip)
+    SlotBlips[slot] = blip
+
+    Notify(("Assigned ped to slot %d"):format(slot))
+    return true
+end
+
+function SwapToSlot(slot)
+    if slot < 1 or slot > 9 then return end
+    local ped = ActorSlots[slot]
+    if not ped or not DoesEntityExist(ped) then
+        Notify("No ped in slot " .. slot)
+        return
+    end
+
+    -- Start possessing this ped
+    StartPossess(ped)
+end
+
+function StartPossess(ped)
+    if not DoesEntityExist(ped) then return end
+
+    -- Stop previous possess
+    if IsPossessing then
+        StopPossess()
+    end
+
+    PossessedPed = ped
+    IsPossessing = true
+
+    -- Create camera attached to ped
+    if not PossessCamera or not DoesCamExist(PossessCamera) then
+        PossessCamera = CreateCam("DEFAULT_SCRIPTED_CAMERA", true)
+    end
+
+    local pedCoords = GetEntityCoords(ped)
+    local camCoords = GetOffsetFromEntityInWorldCoords(ped, 0.0, -3.0, 1.5)
+    SetCamCoord(PossessCamera, camCoords.x, camCoords.y, camCoords.z)
+    PointCamAtEntity(PossessCamera, ped, 0.0, 0.0, 0.0, true)
+    SetCamFov(PossessCamera, 45.0)
+    SetCamActive(PossessCamera, true)
+    RenderScriptCams(true, false, 3000, true, true)
+
+    Notify("Possessing ped - Press ENTER to stop")
+end
+
+function StopPossess()
+    if PossessCamera and DoesCamExist(PossessCamera) then
+        SetCamActive(PossessCamera, false)
+        RenderScriptCams(false, false, 3000, true, true)
+        DestroyCam(PossessCamera, false)
+    end
+    PossessCamera = nil
+    PossessedPed = nil
+    IsPossessing = false
+    Notify("Stopped possessing")
+end
+
+function ClonePed(ped)
+    if not DoesEntityExist(ped) then return end
+
+    local model = GetEntityModel(ped)
+    local coords = GetEntityCoords(ped)
+    local heading = GetEntityHeading(ped)
+
+    RequestModel(model)
+    local timeout = 0
+    while not HasModelLoaded(model) and timeout < 50 do
+        Wait(100)
+        timeout = timeout + 1
+    end
+
+    if not HasModelLoaded(model) then
+        Notify("Failed to load model for cloning")
+        return
+    end
+
+    local clone = CreatePed(4, model, coords.x + 1.0, coords.y, coords.z, heading, true, false)
+    if not DoesEntityExist(clone) then
+        Notify("Failed to create clone")
+        return
+    end
+
+    SetEntityAsMissionEntity(clone, true, true)
+    NetworkRegisterEntityAsNetworked(clone)
+    local netId = NetworkGetNetworkIdFromEntity(clone)
+    SetNetworkIdCanMigrate(netId, true)
+    SetNetworkIdExistsOnAllMachines(netId, true)
+
+    SetPedCanRagdoll(clone, false)
+    SetBlockingOfNonTemporaryEvents(clone, true)
+
+    table.insert(SpawnedPeds, clone)
+    Notify("Cloned ped")
+
+    return clone
+end
+
+-- Vehicle formations
+local IsChasingPlayer = false
+local IsEscortingPlayer = false
+
+function StartVehicleChase()
+    local playerPed = PlayerPedId()
+    if not IsPedInAnyVehicle(playerPed, false) then
+        Notify("Player not in vehicle")
+        return
+    end
+
+    IsChasingPlayer = true
+    Notify("Vehicle chase started")
+
+    for _, ped in ipairs(SpawnedPeds) do
+        if DoesEntityExist(ped) and ped ~= playerPed then
+            local vehicle = ensurePedVehicle(ped, nil) -- Use default vehicle
+            if vehicle then
+                TaskVehicleChase(ped, playerPed)
+            end
+        end
+    end
+end
+
+function StartVehicleEscort()
+    local playerPed = PlayerPedId()
+    if not IsPedInAnyVehicle(playerPed, false) then
+        Notify("Player not in vehicle")
+        return
+    end
+
+    IsEscortingPlayer = true
+    Notify("Vehicle escort started")
+
+    for _, ped in ipairs(SpawnedPeds) do
+        if DoesEntityExist(ped) and ped ~= playerPed then
+            local vehicle = ensurePedVehicle(ped, nil)
+            if vehicle then
+                TaskVehicleEscort(ped, GetVehiclePedIsIn(playerPed, false), -1, 30.0, 786603, 10.0)
+            end
+        end
+    end
+end
+
+function StopVehicleFormations()
+    IsChasingPlayer = false
+    IsEscortingPlayer = false
+
+    for _, ped in ipairs(SpawnedPeds) do
+        if DoesEntityExist(ped) then
+            ClearPedTasks(ped)
+        end
+    end
+
+    Notify("Vehicle formations stopped")
+end
 
 -- Debug command to inspect saved preset data
 RegisterCommand('inspectpreset', function(source, args)
@@ -1628,6 +1861,164 @@ RegisterCommand('inspectpreset', function(source, args)
     Notify(("Coords: %.2f, %.2f, %.2f"):format(preset.coords.x, preset.coords.y, preset.coords.z))
     Notify(("Components: %d saved"):format(preset.clothing and #preset.clothing or 0))
 end, false)
+
+-- Scene Director commands
+RegisterCommand('scenemode', function()
+    ToggleSceneMode()
+end)
+
+RegisterCommand('assignslot', function(source, args)
+    local slot = tonumber(args[1])
+    if not slot then
+        Notify("Usage: /assignslot [1-9]")
+        return
+    end
+
+    local ped = GetClosestSpawnedPed(10.0)
+    if ped then
+        AssignPedToSlot(slot, ped)
+    else
+        Notify("No ped nearby")
+    end
+end)
+
+RegisterCommand('swapslot', function(source, args)
+    local slot = tonumber(args[1])
+    if not slot then
+        Notify("Usage: /swapslot [1-9]")
+        return
+    end
+    SwapToSlot(slot)
+end)
+
+RegisterCommand('possess', function()
+    local ped = GetClosestSpawnedPed(10.0)
+    if ped then
+        StartPossess(ped)
+    else
+        Notify("No ped nearby")
+    end
+end)
+
+RegisterCommand('cloneped', function()
+    local ped = GetClosestSpawnedPed(10.0)
+    if ped then
+        ClonePed(ped)
+    else
+        Notify("No ped nearby")
+    end
+end)
+
+RegisterCommand('waypointall', function()
+    if not IsWaypointActive() then
+        Notify("No waypoint set")
+        return
+    end
+
+    local waypointCoords = GetBlipInfoIdCoord(GetFirstBlipInfoId(8))
+    local foundGround, zPos = GetGroundZFor_3dCoord(waypointCoords.x, waypointCoords.y, 1000.0, 0)
+    if foundGround then
+        waypointCoords = vector3(waypointCoords.x, waypointCoords.y, zPos)
+    end
+
+    for _, ped in ipairs(SpawnedPeds) do
+        if DoesEntityExist(ped) then
+            PedBehaviors[ped] = {
+                mode = "towp",
+                speed = 18.0,
+                drivingStyle = 786603,
+                lastTaskAt = GetGameTimer(),
+                arriveDistance = 8.0
+            }
+            if SceneMode == SCENE_MODE_ACTIVE then
+                issueBehaviorTask(ped, PedBehaviors[ped])
+            end
+        end
+    end
+
+    Notify("Set waypoint for all peds")
+end)
+
+RegisterCommand('pedchase', function()
+    if IsChasingPlayer then
+        StopVehicleFormations()
+    else
+        StartVehicleChase()
+    end
+end)
+
+RegisterCommand('pedescort', function()
+    if IsEscortingPlayer then
+        StopVehicleFormations()
+    else
+        StartVehicleEscort()
+    end
+end)
+
+RegisterCommand('emoteall', function(source, args)
+    if #args < 1 then
+        Notify("Usage: /emoteall [emote name]")
+        return
+    end
+
+    local emoteName = args[1]
+    local emoteData = GetEmote(emoteName)
+
+    if not emoteData then
+        Notify("Emote '" .. emoteName .. "' not found.")
+        return
+    end
+
+    for _, ped in ipairs(SpawnedPeds) do
+        if DoesEntityExist(ped) then
+            TriggerEvent('ped-director:playEmoteOnPed', ped, emoteName)
+        end
+    end
+
+    Notify("Applied emote to all peds: " .. emoteName)
+end)
+
+RegisterCommand('stopall', function()
+    for _, ped in ipairs(SpawnedPeds) do
+        if DoesEntityExist(ped) then
+            clearPedProps(ped)
+            ClearPedTasks(ped)
+        end
+    end
+    Notify("Stopped animations for all peds")
+end)
+
+-- Thread for possess controls
+CreateThread(function()
+    while true do
+        Wait(0)
+        if IsPossessing and PossessedPed and DoesEntityExist(PossessedPed) then
+            -- Disable controls for player while possessing
+            DisableAllControlActions(0)
+            EnableControlAction(0, 1, true) -- Mouse look
+            EnableControlAction(0, 2, true)
+
+            -- Camera controls
+            if IsDisabledControlPressed(0, 32) then -- W
+                AdjustPedOffset(PossessedPed, 0.0, 0.1, 0.0, 0.0, false)
+            end
+            if IsDisabledControlPressed(0, 33) then -- S
+                AdjustPedOffset(PossessedPed, 0.0, -0.1, 0.0, 0.0, false)
+            end
+            if IsDisabledControlPressed(0, 34) then -- A
+                AdjustPedOffset(PossessedPed, -0.1, 0.0, 0.0, 0.0, false)
+            end
+            if IsDisabledControlPressed(0, 30) then -- D
+                AdjustPedOffset(PossessedPed, 0.1, 0.0, 0.0, 0.0, false)
+            end
+
+            -- Stop possess
+            if IsDisabledControlJustPressed(0, 191) then -- Enter
+                StopPossess()
+            end
+        end
+    end
+end)
 
 AddEventHandler("onClientResourceStop", function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
