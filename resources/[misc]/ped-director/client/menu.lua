@@ -1,5 +1,10 @@
 -- RageUI Menu Implementation for Ped Director
 
+-- Ensure RageUI components are available
+if not Panels then
+    Panels = {} -- Fallback definition
+    print("[ped-director] Panels not found, using fallback")
+end
 
 -- State variables for Emote Menu
 local EmoteStartIndex = 1
@@ -49,6 +54,7 @@ end
 local function InitializeMenus()
     if RMenu:Get('ped_director', 'main') then return end -- Already initialized
 
+    print("[ped-director] Initializing RageUI menus...")
     RMenu.Add('ped_director', 'main', RageUI.CreateMenu("Ped Director", "Main Menu"))
     RMenu.Add('ped_director', 'manage_peds', RageUI.CreateSubMenu(RMenu:Get('ped_director', 'main'), "Manage Peds", "Select a ped to control"))
     RMenu.Add('ped_director', 'presets', RageUI.CreateSubMenu(RMenu:Get('ped_director', 'main'), "Presets", "Save and load presets"))
@@ -62,6 +68,7 @@ local function InitializeMenus()
     RMenu.Add('ped_director', 'scene_director', RageUI.CreateSubMenu(RMenu:Get('ped_director', 'main'), "Scene Director", "Advanced scene control"))
     RMenu.Add('ped_director', 'actor_slots', RageUI.CreateSubMenu(RMenu:Get('ped_director', 'scene_director'), "Actor Slots", "Manage actor assignments"))
     RMenu.Add('ped_director', 'global_actions', RageUI.CreateSubMenu(RMenu:Get('ped_director', 'scene_director'), "Global Actions", "Apply to all peds"))
+    print("[ped-director] Menus initialized")
 end
 
 local SelectedPedIndex = nil
@@ -205,7 +212,7 @@ Citizen.CreateThread(function()
         KeepClothingCamThisFrame = false
         
         -- Safe check for RageUI availability
-        if RageUI and Items then
+        if RageUI and Items and Panels then
             local mainMenu = RMenu:Get('ped_director', 'main')
             if mainMenu then
                 mainMenu:IsVisible(function(ItemsObject)
@@ -803,7 +810,7 @@ Citizen.CreateThread(function()
     while true do
         Citizen.Wait(0)
 
-        if RageUI and Items then
+        if RageUI and Items and Panels then
             -- Scene Director Menu
             local sceneDirectorMenu = RMenu:Get('ped_director', 'scene_director')
             if sceneDirectorMenu then
