@@ -863,7 +863,7 @@ Citizen.CreateThread(function()
                             ExecuteCommand('addlight')
                         end
                     end)
-                end)
+                end, function() end)
             end
 
             -- Actor Slots Menu
@@ -891,7 +891,7 @@ Citizen.CreateThread(function()
                             end
                         end)
                     end
-                end)
+                end, function() end)
             end
 
             -- Global Actions Menu
@@ -940,7 +940,7 @@ Citizen.CreateThread(function()
                             ExecuteCommand('removelight')
                         end
                     end)
-                end)
+                end, function() end)
             end
         end
         end) -- end pcall
