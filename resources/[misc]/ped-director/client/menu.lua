@@ -1,10 +1,6 @@
 -- RageUI Menu Implementation for Ped Director
 
--- Ensure RageUI components are available
-if not Panels then
-    Panels = {} -- Fallback definition
-    print("[ped-director] Panels not found, using fallback")
-end
+-- RageUI components should be loaded via fxmanifest now
 
 -- State variables for Emote Menu
 local EmoteStartIndex = 1
@@ -213,7 +209,7 @@ Citizen.CreateThread(function()
 
         local success, err = pcall(function()
             -- Safe check for RageUI availability
-            if RageUI and Items then
+            if RageUI and Items and Panels then
             local mainMenu = RMenu:Get('ped_director', 'main')
             if mainMenu then
                 mainMenu:IsVisible(function(ItemsObject)
@@ -818,8 +814,8 @@ Citizen.CreateThread(function()
         Citizen.Wait(0)
 
         local success, err = pcall(function()
-            if RageUI and Items then
-                -- Scene Director Menu
+        if RageUI and Items and Panels then
+            -- Scene Director Menu
                 local sceneDirectorMenu = RMenu:Get('ped_director', 'scene_director')
                 if sceneDirectorMenu then
                     sceneDirectorMenu:IsVisible(function(ItemsObject)
