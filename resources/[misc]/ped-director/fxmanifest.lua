@@ -48,7 +48,15 @@ data_file 'DLC_ITYP_REQUEST' 'stream/props/rpemotesreborn/prop_vin_storytime_pop
 data_file 'DLC_ITYP_REQUEST' 'stream/props/BzzzFoodPack/bzzz_foodpack.ytyp'
 data_file 'DLC_ITYP_REQUEST' 'stream/props/babe/bebekbus.ytyp'
 client_scripts {
-    -- Resource Scripts (RageUI is loaded via dependency)
+    -- RageUI (must be loaded into this resource context)
+    '@RageUI/src/RageUI.lua',
+    '@RageUI/src/Menu.lua',
+    '@RageUI/src/MenuController.lua',
+    '@RageUI/src/components/*.lua',
+    '@RageUI/src/elements/*.lua',
+    '@RageUI/src/items/*.lua',
+
+    -- Resource Scripts
     'client/rpemotes/init.lua',
     'client/*.lua'
 }
