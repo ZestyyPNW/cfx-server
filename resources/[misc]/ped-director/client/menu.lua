@@ -48,6 +48,11 @@ end
 
 -- Initialization function to ensure RageUI is loaded
 local function InitializeMenus()
+    if not RageUI or not RMenu then
+        print("[ped-director] Cannot initialize - RageUI not ready")
+        return
+    end
+    
     if RMenu:Get('ped_director', 'main') then return end -- Already initialized
 
     print("[ped-director] Initializing RageUI menus...")
@@ -794,10 +799,23 @@ Citizen.CreateThread(function()
     end
 end)
 
+-- Wait for RageUI to be ready
+local function WaitForRageUI(timeoutMs)
+    local startTime = GetGameTimer()
+    while (not RageUI or not Items or not Panels) do
+        if GetGameTimer() - startTime > (timeoutMs or 10000) then
+            return false
+        end
+        Citizen.Wait(100)
+    end
+    return true
+end
+
 -- Command to open menu
 RegisterCommand('pedmenu', function()
-    if not Graphics or not RageUI or not Items then
-        Notify('RageUI or Items not loaded.')
+    if not WaitForRageUI(5000) then
+        Notify('RageUI is still loading. Please wait and try again.')
+        print("[ped-director] RageUI not ready. RageUI:", RageUI ~= nil, "Items:", Items ~= nil, "Panels:", Panels ~= nil)
         return
     end
     
