@@ -107,61 +107,58 @@ local function DrawText3D(x, y, z, text)
     end
 end
 
--- Gizmo Logic Thread
+-- Gizmo Logic Thread (simplified for stability)
 CreateThread(function()
-    while true do
-        local sleep = 1000
-        if GizmoActive and GizmoPed and DoesEntityExist(GizmoPed) then
-            sleep = 0
-            
-            -- Disable controls while editing
-            DisableAllControlActions(0)
-            EnableControlAction(0, 1, true) -- Camera Look
-            EnableControlAction(0, 2, true) -- Camera Look
-            
+    while isResourceActive do
+        Wait(50)
+        
+        if not GizmoActive then
+            Wait(500)
+            goto continue
+        end
+        
+        if not GizmoPed or not DoesEntityExist(GizmoPed) then
+            GizmoActive = false
+            GizmoPed = nil
+            goto continue
+        end
+        
+        local success, err = pcall(function()
             -- Instructions
             local coords = GetEntityCoords(GizmoPed)
             DrawText3D(coords.x, coords.y, coords.z + 1.2, "Gizmo Mode: " .. GizmoMode)
-            DrawText3D(coords.x, coords.y, coords.z + 1.1, "[W/A/S/D] Move X/Y  [Q/E] Height/Rotate  [SHIFT] Slow  [TAB] Switch Mode  [ENTER] Save")
+            DrawText3D(coords.x, coords.y, coords.z + 1.1, "[W/A/S/D] Move  [Q/E] Height  [TAB] Mode  [ENTER] Save")
 
-            -- Multiplier for speed
-            local speed = IsDisabledControlPressed(0, 21) and 0.01 or 0.05 -- Shift for slow
-            if GizmoMode == "ROTATE" then speed = speed * 20.0 end -- Faster rotation
+            local speed = IsDisabledControlPressed(0, 21) and 0.01 or 0.05
+            if GizmoMode == "ROTATE" then speed = speed * 20.0 end
 
             if GizmoMode == "MOVE" then
-                -- Move Logic
-                if IsDisabledControlPressed(0, 32) then -- W (Forward/North)
+                if IsDisabledControlPressed(0, 32) then -- W
                     AdjustPedOffset(GizmoPed, 0.0, speed, 0.0, 0.0, false)
                 end
-                if IsDisabledControlPressed(0, 33) then -- S (Backward/South)
+                if IsDisabledControlPressed(0, 33) then -- S
                     AdjustPedOffset(GizmoPed, 0.0, -speed, 0.0, 0.0, false)
                 end
-                if IsDisabledControlPressed(0, 34) then -- A (Left/West)
+                if IsDisabledControlPressed(0, 34) then -- A
                     AdjustPedOffset(GizmoPed, -speed, 0.0, 0.0, 0.0, false)
                 end
-                if IsDisabledControlPressed(0, 30) then -- D (Right/East)
+                if IsDisabledControlPressed(0, 30) then -- D
                     AdjustPedOffset(GizmoPed, speed, 0.0, 0.0, 0.0, false)
                 end
-                if IsDisabledControlPressed(0, 44) then -- Q (Up)
+                if IsDisabledControlPressed(0, 44) then -- Q
                     AdjustPedOffset(GizmoPed, 0.0, 0.0, speed, 0.0, false)
                 end
-                if IsDisabledControlPressed(0, 38) then -- E (Down)
+                if IsDisabledControlPressed(0, 38) then -- E
                     AdjustPedOffset(GizmoPed, 0.0, 0.0, -speed, 0.0, false)
                 end
-
-                -- Draw Lines
                 DrawMarker(28, coords.x, coords.y, coords.z, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.5, 0.5, 0, 255, 0, 100, false, false, 2, nil, nil, false)
-                
             elseif GizmoMode == "ROTATE" then
-                -- Rotate Logic
-                if IsDisabledControlPressed(0, 34) or IsDisabledControlPressed(0, 44) then -- A or Q (Left)
+                if IsDisabledControlPressed(0, 34) or IsDisabledControlPressed(0, 44) then
                     AdjustPedOffset(GizmoPed, 0.0, 0.0, 0.0, speed, false)
                 end
-                if IsDisabledControlPressed(0, 30) or IsDisabledControlPressed(0, 38) then -- D or E (Right)
+                if IsDisabledControlPressed(0, 30) or IsDisabledControlPressed(0, 38) then
                     AdjustPedOffset(GizmoPed, 0.0, 0.0, 0.0, -speed, false)
                 end
-                
-                -- Visual Indicator for heading
                 local heading = GetEntityHeading(GizmoPed)
                 local rad = math.rad(heading)
                 local forwardX = -math.sin(rad) * 2.0
@@ -169,25 +166,24 @@ CreateThread(function()
                 DrawLine(coords.x, coords.y, coords.z, coords.x + forwardX, coords.y + forwardY, coords.z, 255, 0, 0, 255)
             end
 
-            -- Switch Mode
             if IsDisabledControlJustPressed(0, 37) then -- TAB
                 if GizmoMode == "MOVE" then GizmoMode = "ROTATE" else GizmoMode = "MOVE" end
             end
 
-            -- Exit / Save
             if IsDisabledControlJustPressed(0, 191) or IsDisabledControlJustPressed(0, 18) then -- ENTER
                 GizmoActive = false
                 GizmoPed = nil
                 Notify("Gizmo Mode Exited")
             end
-        else
-            if GizmoActive then
-                -- Cleanup if ped deleted
-                GizmoActive = false
-                GizmoPed = nil
-            end
+        end)
+        
+        if not success then
+            print("[ped-director] Gizmo error: " .. tostring(err))
+            GizmoActive = false
+            GizmoPed = nil
         end
-        Wait(sleep)
+        
+        ::continue::
     end
 end)
 
@@ -1836,19 +1832,19 @@ function ClearAllStageLights()
     Notify("All stage lights cleared")
 end
 
--- Update lights in a thread
+-- Update lights in a thread (disabled for stability)
+--[[
 CreateThread(function()
-    while true do
+    while isResourceActive do
         Wait(100)
         for _, light in pairs(StageLights) do
             if light.enabled then
-                DRAW_LIGHT_WITH_RANGE(light.pos.x, light.pos.y, light.pos.z,
-                    light.color.r, light.color.g, light.color.b,
-                    light.range, light.intensity)
+                -- Disabled: DRAW_LIGHT_WITH_RANGE can cause crashes
             end
         end
     end
 end)
+--]]
 
 -- Vehicle formations
 local IsChasingPlayer = false
@@ -2126,18 +2122,24 @@ RegisterCommand('stopall', function()
     Notify("Stopped animations for all peds")
 end)
 
--- Thread for possess controls
+-- Thread for possess controls (simplified for stability)
 CreateThread(function()
     while isResourceActive do
+        Wait(100) -- Changed from 0 to 100ms for stability
+        
+        if not IsPossessing then
+            Wait(500) -- Longer wait when not possessing
+            goto continue
+        end
+        
+        if not PossessedPed or not DoesEntityExist(PossessedPed) then
+            IsPossessing = false
+            goto continue
+        end
+        
+        -- Only process when actually possessing
         local success, err = pcall(function()
-            Wait(0)
-            if IsPossessing and PossessedPed and DoesEntityExist(PossessedPed) then
-            -- Disable controls for player while possessing
-            DisableAllControlActions(0)
-            EnableControlAction(0, 1, true) -- Mouse look
-            EnableControlAction(0, 2, true)
-
-            -- Camera controls
+            -- Camera controls - only check every 100ms
             if IsDisabledControlPressed(0, 32) then -- W
                 AdjustPedOffset(PossessedPed, 0.0, 0.1, 0.0, 0.0, false)
             end
@@ -2155,13 +2157,14 @@ CreateThread(function()
             if IsDisabledControlJustPressed(0, 191) then -- Enter
                 StopPossess()
             end
-        end
-        end) -- end pcall
+        end)
 
         if not success then
-            print("[ped-director] Possess thread error: " .. tostring(err))
-            Citizen.Wait(5000)
+            print("[ped-director] Possess controls error: " .. tostring(err))
+            IsPossessing = false -- Stop possessing on error
         end
+        
+        ::continue::
     end
 end)
 
