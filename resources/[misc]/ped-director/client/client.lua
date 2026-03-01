@@ -1611,8 +1611,8 @@ Scene Director:
 /emoteall [emote] - Apply emote to all peds
 /stopall - Stop animations for all peds
 /scenereset - Reset scene director state
-/addlight - Create stage light at current position
-/removelight [id] - Remove stage light (no id = clear all)
+/addlight - DISABLED (causes crashes)
+/removelight [id] - DISABLED (causes crashes)
 
 Driving/Patrol:
 /pedvehicle [model] - Spawn vehicle and put nearest ped in driver seat
@@ -2072,10 +2072,12 @@ RegisterCommand('pedescort', function()
     end
 end)
 
+-- Stage lighting commands disabled for stability
+--[[
 RegisterCommand('addlight', function()
     local playerPed = PlayerPedId()
     local pos = GetEntityCoords(playerPed)
-    pos = GetOffsetFromEntityInWorldCoords(playerPed, 0.0, 2.0, 0.0) -- In front
+    pos = GetOffsetFromEntityInWorldCoords(playerPed, 0.0, 2.0, 0.0)
     local lightId = CreateStageLight(pos)
     Notify("Stage light created (ID: " .. lightId .. ")")
 end)
@@ -2087,6 +2089,15 @@ RegisterCommand('removelight', function(source, args)
     else
         ClearAllStageLights()
     end
+end)
+--]]
+
+RegisterCommand('addlight', function()
+    Notify("Stage lighting disabled for stability")
+end)
+
+RegisterCommand('removelight', function()
+    Notify("Stage lighting disabled for stability")
 end)
 
 RegisterCommand('emoteall', function(source, args)
