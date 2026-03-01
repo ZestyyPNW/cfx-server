@@ -975,7 +975,11 @@ RegisterKeyMapping('pedmenu', 'Open Ped Director Menu', 'keyboard', 'F6')
 
 AddEventHandler("onClientResourceStop", function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
-    if RageUI and RageUI.CloseAll then
-        RageUI.CloseAll()
-    end
+    
+    -- Wrap in pcall to prevent crashes during shutdown
+    pcall(function()
+        if RageUI and RageUI.CloseAll then
+            RageUI.CloseAll()
+        end
+    end)
 end)

@@ -82,10 +82,19 @@ function FocusPedDirectorCamera(ped, focusPart)
 end
 
 function ClearPedDirectorCamera()
-    if PedDirectorCamera and DoesCamExist(PedDirectorCamera) then
-        RenderScriptCams(false, true, 250, true, true)
-        DestroyCam(PedDirectorCamera, false)
+    if not PedDirectorCamera then return end
+    
+    local success = pcall(function()
+        if DoesCamExist(PedDirectorCamera) then
+            RenderScriptCams(false, false, 0, false, false)
+            DestroyCam(PedDirectorCamera, false)
+        end
+    end)
+    
+    if not success then
+        print("[ped-director] Camera cleanup error (non-critical during shutdown)")
     end
+    
     PedDirectorCamera = nil
     PedDirectorCameraActive = false
 end
@@ -2181,5 +2190,40 @@ end)
 
 AddEventHandler("onClientResourceStop", function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
-    ClearPedDirectorCamera()
+    
+    print("[ped-director] Resource stopping - running cleanup...")
+    
+    -- Wrap all cleanup in pcall to prevent crashes during shutdown
+    local success, err = pcall(function()
+        -- Stop all threads
+        isResourceActive = false
+        
+        -- Clear cameras
+        ClearPedDirectorCamera()
+        
+        -- Clear possess camera if active
+        if PossessCamera then
+            pcall(function()
+                if DoesCamExist(PossessCamera) then
+                    SetCamActive(PossessCamera, false)
+                    DestroyCam(PossessCamera, false)
+                end
+            end)
+            PossessCamera = nil
+        end
+        
+        -- Stop possessing
+        IsPossessing = false
+        PossessedPed = nil
+        
+        -- Clear gizmo
+        GizmoActive = false
+        GizmoPed = nil
+    end)
+    
+    if not success then
+        print("[ped-director] Cleanup error during stop: " .. tostring(err))
+    end
+    
+    print("[ped-director] Cleanup complete")
 end)
