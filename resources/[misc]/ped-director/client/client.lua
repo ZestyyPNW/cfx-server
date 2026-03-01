@@ -2128,9 +2128,10 @@ end)
 
 -- Thread for possess controls
 CreateThread(function()
-    while true do
-        Wait(0)
-        if IsPossessing and PossessedPed and DoesEntityExist(PossessedPed) then
+    while isResourceActive do
+        local success, err = pcall(function()
+            Wait(0)
+            if IsPossessing and PossessedPed and DoesEntityExist(PossessedPed) then
             -- Disable controls for player while possessing
             DisableAllControlActions(0)
             EnableControlAction(0, 1, true) -- Mouse look
@@ -2154,6 +2155,12 @@ CreateThread(function()
             if IsDisabledControlJustPressed(0, 191) then -- Enter
                 StopPossess()
             end
+        end
+        end) -- end pcall
+
+        if not success then
+            print("[ped-director] Possess thread error: " .. tostring(err))
+            Citizen.Wait(5000)
         end
     end
 end)

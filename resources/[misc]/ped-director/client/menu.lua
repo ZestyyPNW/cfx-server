@@ -210,9 +210,10 @@ Citizen.CreateThread(function()
     while true do
         Citizen.Wait(0)
         KeepClothingCamThisFrame = false
-        
-        -- Safe check for RageUI availability
-        if RageUI and Items and Panels then
+
+        local success, err = pcall(function()
+            -- Safe check for RageUI availability
+            if RageUI and Items then
             local mainMenu = RMenu:Get('ped_director', 'main')
             if mainMenu then
                 mainMenu:IsVisible(function(ItemsObject)
@@ -788,6 +789,12 @@ Citizen.CreateThread(function()
                 ClearPedDirectorCamera()
             end
         end
+        end) -- end pcall
+
+        if not success then
+            print("[ped-director] Main menu error: " .. tostring(err))
+            Citizen.Wait(5000) -- Wait longer on error
+        end
     end
 end)
 
@@ -810,11 +817,12 @@ Citizen.CreateThread(function()
     while true do
         Citizen.Wait(0)
 
-        if RageUI and Items and Panels then
-            -- Scene Director Menu
-            local sceneDirectorMenu = RMenu:Get('ped_director', 'scene_director')
-            if sceneDirectorMenu then
-                sceneDirectorMenu:IsVisible(function(ItemsObject)
+        local success, err = pcall(function()
+            if RageUI and Items then
+                -- Scene Director Menu
+                local sceneDirectorMenu = RMenu:Get('ped_director', 'scene_director')
+                if sceneDirectorMenu then
+                    sceneDirectorMenu:IsVisible(function(ItemsObject)
                     ItemsObject = ItemsObject or Items
 
                     local modeText = SceneMode == "setup" and "SETUP" or "ACTIVE"
@@ -938,6 +946,12 @@ Citizen.CreateThread(function()
                     end)
                 end)
             end
+        end
+        end) -- end pcall
+
+        if not success then
+            print("[ped-director] Menu error: " .. tostring(err))
+            Citizen.Wait(5000) -- Wait longer on error
         end
     end
 end)
