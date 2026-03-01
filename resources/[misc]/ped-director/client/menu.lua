@@ -2,6 +2,58 @@
 
 -- RageUI components should be loaded via fxmanifest now
 
+local function tryLoadRageUIFromResource(resourceName)
+    local files = {
+        "src/RageUI.lua",
+        "src/Menu.lua",
+        "src/MenuController.lua",
+        "src/components/Audio.lua",
+        "src/components/Graphics.lua",
+        "src/components/Keys.lua",
+        "src/components/Util.lua",
+        "src/components/Visual.lua",
+        "src/elements/ItemsBadge.lua",
+        "src/elements/ItemsColour.lua",
+        "src/elements/PanelColour.lua",
+        "src/items/Items.lua",
+        "src/items/Panels.lua",
+    }
+
+    for _, path in ipairs(files) do
+        local content = LoadResourceFile(resourceName, path)
+        if type(content) ~= "string" or content == "" then
+            return false
+        end
+
+        local chunk, err = load(content, ("@@%s/%s"):format(resourceName, path))
+        if not chunk then
+            print(("[ped-director] Failed to compile %s/%s: %s"):format(resourceName, path, tostring(err)))
+            return false
+        end
+        chunk()
+    end
+
+    return RageUI ~= nil and Items ~= nil and Panels ~= nil
+end
+
+local function EnsureRageUILoaded()
+    if RageUI and Items and Panels then
+        return true
+    end
+
+    if tryLoadRageUIFromResource("RageUI") then
+        print("[ped-director] Loaded RageUI via fallback loader (RageUI)")
+        return true
+    end
+
+    if tryLoadRageUIFromResource("RageUI.backup_20260108_072949") then
+        print("[ped-director] Loaded RageUI via fallback loader (backup)")
+        return true
+    end
+
+    return false
+end
+
 -- State variables for Emote Menu
 local EmoteStartIndex = 1
 local EmotePerPage = 15
@@ -804,6 +856,7 @@ end)
 local function WaitForRageUI(timeoutMs)
     local startTime = GetGameTimer()
     while (not RageUI or not Items or not Panels) do
+        EnsureRageUILoaded()
         if GetGameTimer() - startTime > (timeoutMs or 10000) then
             return false
         end
