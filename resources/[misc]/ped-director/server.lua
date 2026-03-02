@@ -1,36 +1,36 @@
--- Server-side persistence for Ped Director presets
-local PresetsFile = 'presets.json'
+--[[
+    Ped Director v2.0 - Server
+    Preset persistence via JSON file.
+]]
 
--- Helper to load presets from file
+local PRESETS_FILE = 'presets.json'
+
 local function LoadPresets()
-    local fileContent = LoadResourceFile(GetCurrentResourceName(), PresetsFile)
-    if fileContent then
-        return json.decode(fileContent) or {}
-    else
-        return {}
+    local raw = LoadResourceFile(GetCurrentResourceName(), PRESETS_FILE)
+    if raw and raw ~= '' then
+        local ok, data = pcall(json.decode, raw)
+        if ok and type(data) == 'table' then return data end
+    end
+    return {}
+end
+
+local function SavePresets(presets)
+    local ok, encoded = pcall(json.encode, presets, { indent = true })
+    if ok then
+        SaveResourceFile(GetCurrentResourceName(), PRESETS_FILE, encoded, -1)
     end
 end
 
--- Helper to save presets to file
-local function SavePresets(presets)
-    SaveResourceFile(GetCurrentResourceName(), PresetsFile, json.encode(presets, {indent = true}), -1)
-end
-
--- Event to request presets on client join/resource start
-RegisterNetEvent('ped-director:requestPresets')
-AddEventHandler('ped-director:requestPresets', function()
+RegisterNetEvent('ped-director:requestPresets', function()
     local src = source
-    local presets = LoadPresets()
-    TriggerClientEvent('ped-director:receivePresets', src, presets)
+    if not src or src <= 0 then return end
+    TriggerClientEvent('ped-director:receivePresets', src, LoadPresets())
 end)
 
--- Event to save a new preset
-RegisterNetEvent('ped-director:savePreset')
-AddEventHandler('ped-director:savePreset', function(name, data)
+RegisterNetEvent('ped-director:savePreset', function(name, data)
+    if type(name) ~= 'string' or name == '' then return end
+    if type(data) ~= 'table' then return end
     local presets = LoadPresets()
     presets[name] = data
     SavePresets(presets)
-    -- Broadcast update to all clients? Or just let them fetch next time?
-    -- For now, let's just save. Clients might need to re-fetch if we wanted real-time sync.
-    -- But since this is likely single-admin usage, simple save is fine.
 end)

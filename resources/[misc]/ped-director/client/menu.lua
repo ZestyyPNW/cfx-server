@@ -1,1035 +1,696 @@
--- RageUI Menu Implementation for Ped Director
+--[[
+    Ped Director v2.0 - RageUI Menu
+    SINGLE render loop. All menus drawn in one CreateThread(Wait(0)).
+    Reads/writes state via the PedDir global table from client.lua.
+]]
 
--- RageUI components should be loaded via fxmanifest now
+-- =============================================
+-- RAGEUI LOADER
+-- =============================================
 
-local function tryLoadRageUIFromResource(resourceName)
+local function TryLoadRageUI(resName)
     local files = {
-        "src/RageUI.lua",
-        "src/Menu.lua",
-        "src/MenuController.lua",
-        "src/components/Audio.lua",
-        "src/components/Graphics.lua",
-        "src/components/Keys.lua",
-        "src/components/Util.lua",
-        "src/components/Visual.lua",
-        "src/elements/ItemsBadge.lua",
-        "src/elements/ItemsColour.lua",
-        "src/elements/PanelColour.lua",
-        "src/items/Items.lua",
-        "src/items/Panels.lua",
+        'src/RageUI.lua', 'src/Menu.lua', 'src/MenuController.lua',
+        'src/components/Audio.lua', 'src/components/Graphics.lua',
+        'src/components/Keys.lua', 'src/components/Util.lua', 'src/components/Visual.lua',
+        'src/elements/ItemsBadge.lua', 'src/elements/ItemsColour.lua', 'src/elements/PanelColour.lua',
+        'src/items/Items.lua', 'src/items/Panels.lua',
     }
-
     for _, path in ipairs(files) do
-        local content = LoadResourceFile(resourceName, path)
-        if type(content) ~= "string" or content == "" then
-            return false
-        end
-
-        local chunk, err = load(content, ("@@%s/%s"):format(resourceName, path))
-        if not chunk then
-            print(("[ped-director] Failed to compile %s/%s: %s"):format(resourceName, path, tostring(err)))
-            return false
-        end
+        local content = LoadResourceFile(resName, path)
+        if type(content) ~= 'string' or content == '' then return false end
+        local chunk, err = load(content, ('@@%s/%s'):format(resName, path))
+        if not chunk then return false end
         chunk()
     end
-
     return RageUI ~= nil and Items ~= nil and Panels ~= nil
 end
 
-local function EnsureRageUILoaded()
-    if RageUI and Items and Panels then
-        return true
-    end
-
-    if tryLoadRageUIFromResource("RageUI") then
-        print("[ped-director] Loaded RageUI via fallback loader (RageUI)")
-        return true
-    end
-
-    if tryLoadRageUIFromResource("RageUI.backup_20260108_072949") then
-        print("[ped-director] Loaded RageUI via fallback loader (backup)")
-        return true
-    end
-
+local function EnsureRageUI()
+    if RageUI and Items and Panels then return true end
+    if TryLoadRageUI('RageUI') then return true end
     return false
 end
 
--- State variables for Emote Menu
-local EmoteStartIndex = 1
-local EmotePerPage = 15
-local EmoteList = {}
+local function WaitForRageUI(timeoutMs)
+    local deadline = GetGameTimer() + (timeoutMs or 10000)
+    while not (RageUI and Items and Panels) do
+        EnsureRageUI()
+        if GetGameTimer() > deadline then return false end
+        Wait(100)
+    end
+    return true
+end
 
--- Polyfills & Dependencies
-function string.starts(String, Start)
-   return string.sub(String, 1, string.len(Start)) == Start
+-- =============================================
+-- RMENU POLYFILL
+-- =============================================
+
+if not RMenu then
+    RMenu = { Menus = {} }
+    function RMenu.Add(_, Type, Name, Menu)
+        RMenu.Menus[Type] = RMenu.Menus[Type] or {}
+        RMenu.Menus[Type][Name] = Menu
+    end
+    function RMenu:Get(Type, Name)
+        return self.Menus[Type] and self.Menus[Type][Name] or nil
+    end
+end
+
+-- =============================================
+-- POLYFILLS
+-- =============================================
+
+function string.starts(s, prefix)
+    return s:sub(1, #prefix) == prefix
 end
 
 if not math.round then
-    function math.round(num, numDecimalPlaces)
-        local mult = 10^(numDecimalPlaces or 0)
+    function math.round(num, dp)
+        local mult = 10 ^ (dp or 0)
         return math.floor(num * mult + 0.5) / mult
     end
 end
 
--- Define RMenu wrapper locally if it's not global
-if not RMenu then
-    RMenu = {}
-    RMenu.Menus = {}
+-- =============================================
+-- LOCAL STATE
+-- =============================================
 
-    function RMenu.Add(Type, Name, Menu)
-        if not RMenu.Menus[Type] then
-            RMenu.Menus[Type] = {}
-        end
-        RMenu.Menus[Type][Name] = Menu
-    end
+local ALIVE = true
+local MenusInitialized = false
+local SelectedPedIndex = nil
+local SelectedPedEntity = nil
+local SelectedComponent = nil
+local EmoteSearchText = ''
+local EmoteStartIndex = 1
+local EmotePerPage = 15
+local EmoteList = {}
+local NudgeAmount = 0.1
+local MovementRelative = true
+local PendingGoBack = false
+local KeepClothCam = false
 
-    function RMenu:Get(Type, Name)
-        if self.Menus[Type] then
-            return self.Menus[Type][Name]
-        end
-        return nil
-    end
-end
+local WalkingStyles = {
+    { label = 'Default',  value = 'move_m@casual@d' },
+    { label = 'Gangster', value = 'move_m@gangster@var_i' },
+    { label = 'Posh',     value = 'move_m@posh@person_a' },
+    { label = 'Tough',    value = 'move_m@tough_guy@' },
+    { label = 'Sexy',     value = 'move_f@sexy@a' },
+    { label = 'Drunk',    value = 'move_m@drunk@a' },
+    { label = 'Injured',  value = 'move_m@injured' },
+    { label = 'Cop',      value = 'move_m@business@b' },
+}
 
--- Notification helper needed in menu.lua as well
-function Notify(msg)
+local Weapons = {
+    { label = 'Pistol',         value = 'WEAPON_PISTOL' },
+    { label = 'Combat Pistol',  value = 'WEAPON_COMBATPISTOL' },
+    { label = 'Assault Rifle',  value = 'WEAPON_ASSAULTRIFLE' },
+    { label = 'Carbine Rifle',  value = 'WEAPON_CARBINERIFLE' },
+    { label = 'Pump Shotgun',   value = 'WEAPON_PUMPSHOTGUN' },
+    { label = 'Sniper Rifle',   value = 'WEAPON_SNIPERRIFLE' },
+    { label = 'Knife',          value = 'WEAPON_KNIFE' },
+    { label = 'Bat',            value = 'WEAPON_BAT' },
+    { label = 'Flashlight',     value = 'WEAPON_FLASHLIGHT' },
+    { label = 'Remove All',     value = 'REMOVE_ALL' },
+}
+
+-- =============================================
+-- HELPERS
+-- =============================================
+
+local function Notify(msg)
+    if PedDir and PedDir.Notify then PedDir.Notify(msg) return end
     SetNotificationTextEntry('STRING')
-    AddTextComponentString(msg)
+    AddTextComponentString(tostring(msg))
     DrawNotification(false, true)
 end
 
--- Initialization function to ensure RageUI is loaded
-local function InitializeMenus()
-    if not RageUI or not RMenu then
-        print("[ped-director] Cannot initialize - RageUI not ready")
-        return
-    end
-    
-    if RMenu:Get('ped_director', 'main') then return end -- Already initialized
-
-    print("[ped-director] Initializing RageUI menus...")
-    RMenu.Add('ped_director', 'main', RageUI.CreateMenu("Ped Director", "Main Menu"))
-    RMenu.Add('ped_director', 'manage_peds', RageUI.CreateSubMenu(RMenu:Get('ped_director', 'main'), "Manage Peds", "Select a ped to control"))
-    RMenu.Add('ped_director', 'presets', RageUI.CreateSubMenu(RMenu:Get('ped_director', 'main'), "Presets", "Save and load presets"))
-    RMenu.Add('ped_director', 'ped_options', RageUI.CreateSubMenu(RMenu:Get('ped_director', 'manage_peds'), "Ped Options", "Control specific ped"))
-    RMenu.Add('ped_director', 'positioning', RageUI.CreateSubMenu(RMenu:Get('ped_director', 'ped_options'), "Positioning", "Precise manipulation"))
-    RMenu.Add('ped_director', 'clothing', RageUI.CreateSubMenu(RMenu:Get('ped_director', 'ped_options'), "Clothing", "Customize appearance"))
-    RMenu.Add('ped_director', 'clothing_edit', RageUI.CreateSubMenu(RMenu:Get('ped_director', 'clothing'), "Edit Component", "Change drawable and texture"))
-    RMenu.Add('ped_director', 'emotes', RageUI.CreateSubMenu(RMenu:Get('ped_director', 'ped_options'), "Emotes", "Select an animation"))
-    RMenu.Add('ped_director', 'walking_styles', RageUI.CreateSubMenu(RMenu:Get('ped_director', 'ped_options'), "Walking Styles", "Set movement style"))
-    RMenu.Add('ped_director', 'weapons', RageUI.CreateSubMenu(RMenu:Get('ped_director', 'ped_options'), "Weapons", "Give weapon"))
-    RMenu.Add('ped_director', 'scene_director', RageUI.CreateSubMenu(RMenu:Get('ped_director', 'main'), "Scene Director", "Advanced scene control"))
-    RMenu.Add('ped_director', 'actor_slots', RageUI.CreateSubMenu(RMenu:Get('ped_director', 'scene_director'), "Actor Slots", "Manage actor assignments"))
-    RMenu.Add('ped_director', 'global_actions', RageUI.CreateSubMenu(RMenu:Get('ped_director', 'scene_director'), "Global Actions", "Apply to all peds"))
-    print("[ped-director] Menus initialized")
+local function KeyboardInput(title, example, maxLen)
+    AddTextEntry('FMMC_KEY_TIP1', title)
+    DisplayOnscreenKeyboard(1, 'FMMC_KEY_TIP1', '', example, '', '', '', maxLen)
+    while UpdateOnscreenKeyboard() == 0 do Wait(0) end
+    return GetOnscreenKeyboardResult()
 end
 
-local SelectedPedIndex = nil
-local SelectedPedEntity = nil
-local SelectedComponent = nil -- {label, id}
-local EmoteSearchText = ""
-local NudgeAmount = 0.1 -- Default nudge step
-local MovementModeRelative = true -- Toggle for relative vs world movement
-local PendingGoBack = false
-local KeepClothingCamThisFrame = false
-local menuResourceActive = true
-
-Emotes = Emotes or {}
-
--- Walking Styles List
-local WalkingStyles = {
-    {label = "Default", value = "move_m@casual@d"},
-    {label = "Gangster", value = "move_m@gangster@var_i"},
-    {label = "Posh", value = "move_m@posh@person_a"},
-    {label = "Tough", value = "move_m@tough_guy@"},
-    {label = "Sexy", value = "move_f@sexy@a"},
-    {label = "Drunk", value = "move_m@drunk@a"},
-    {label = "Injured", value = "move_m@injured"},
-    {label = "Cop", value = "move_m@business@b"},
-}
-
--- Weapons List
-local Weapons = {
-    {label = "Pistol", value = "WEAPON_PISTOL"},
-    {label = "Combat Pistol", value = "WEAPON_COMBATPISTOL"},
-    {label = "Assault Rifle", value = "WEAPON_ASSAULTRIFLE"},
-    {label = "Carbine Rifle", value = "WEAPON_CARBINERIFLE"},
-    {label = "Pump Shotgun", value = "WEAPON_PUMPSHOTGUN"},
-    {label = "Sniper Rifle", value = "WEAPON_SNIPERRIFLE"},
-    {label = "Knife", value = "WEAPON_KNIFE"},
-    {label = "Bat", value = "WEAPON_BAT"},
-    {label = "Flashlight", value = "WEAPON_FLASHLIGHT"},
-    {label = "Remove All", value = "REMOVE_ALL"},
-}
-
--- Helper for Keyboard Input
-local function KeyboardInput(text, example, maxLength)
-    AddTextEntry('FMMC_KEY_TIP1', text)
-    DisplayOnscreenKeyboard(1, "FMMC_KEY_TIP1", "", example, "", "", "", maxLength)
-    while UpdateOnscreenKeyboard() == 0 do
-        Wait(0)
+local function BuildNumberList(minVal, maxVal)
+    local labels, values = {}, {}
+    for v = math.floor(minVal), math.floor(maxVal) do
+        labels[#labels + 1] = tostring(v)
+        values[#values + 1] = v
     end
-    if GetOnscreenKeyboardResult() then
-        return GetOnscreenKeyboardResult()
-    end
-    return nil
+    return labels, values
 end
 
-local function CountEmotes()
-    local count = 0
-    if Emotes then
-        for _ in pairs(Emotes) do count = count + 1 end
+local function FindListIndex(values, target)
+    target = tonumber(target) or 0
+    for i = 1, #values do
+        if values[i] == target then return i end
     end
-    return count
+    return 1
 end
 
--- Helper to get sorted emote options
 local function UpdateEmoteList()
     EmoteList = {}
-    
-    -- Ensure Emotes table is populated including PropEmotes
-    if RP and (not Emotes or next(Emotes) == nil or CountEmotes() < 100) then
-        Emotes = {}
-        local function merge(target, source)
-            if not source then return end
-            for k,v in pairs(source) do target[k] = v end
-        end
-        merge(Emotes, RP.Emotes)
-        merge(Emotes, RP.PropEmotes)
-        merge(Emotes, RP.Dances)
-        merge(Emotes, RP.Expressions)
-        merge(Emotes, RP.Shared)
-    end
-    
-    for k, v in pairs(Emotes) do
-        local label = v[3] .. " (" .. k .. ")"
-        if EmoteSearchText == "" or string.find(string.lower(label), string.lower(EmoteSearchText)) then
-            table.insert(EmoteList, {
-                value = k,
-                label = label
-            })
+    local src = Emotes or {}
+    for k, v in pairs(src) do
+        local label = (v[3] or k) .. ' (' .. k .. ')'
+        if EmoteSearchText == '' or string.find(string.lower(label), string.lower(EmoteSearchText)) then
+            EmoteList[#EmoteList + 1] = { value = k, label = label }
         end
     end
     table.sort(EmoteList, function(a, b) return a.label < b.label end)
 end
 
--- Helper to get clothing max values
-local function getClothingMax(ped, componentId)
-    return GetNumberOfPedDrawableVariations(ped, componentId) - 1
+-- =============================================
+-- MENU INITIALIZATION
+-- =============================================
+
+local function InitMenus()
+    if MenusInitialized then return end
+    if not RageUI or not RMenu then return end
+
+    RMenu:Add('pd', 'main',          RageUI.CreateMenu('Ped Director', 'Main Menu'))
+    RMenu:Add('pd', 'manage',        RageUI.CreateSubMenu(RMenu:Get('pd', 'main'),    'Manage Peds',    'Select a ped'))
+    RMenu:Add('pd', 'presets',        RageUI.CreateSubMenu(RMenu:Get('pd', 'main'),    'Presets',        'Save and load'))
+    RMenu:Add('pd', 'ped_opts',       RageUI.CreateSubMenu(RMenu:Get('pd', 'manage'),  'Ped Options',    'Control ped'))
+    RMenu:Add('pd', 'positioning',    RageUI.CreateSubMenu(RMenu:Get('pd', 'ped_opts'), 'Positioning',   'Move & rotate'))
+    RMenu:Add('pd', 'clothing',       RageUI.CreateSubMenu(RMenu:Get('pd', 'ped_opts'), 'Clothing',      'Customize'))
+    RMenu:Add('pd', 'clothing_edit',  RageUI.CreateSubMenu(RMenu:Get('pd', 'clothing'), 'Edit Component','Drawable & texture'))
+    RMenu:Add('pd', 'emotes',         RageUI.CreateSubMenu(RMenu:Get('pd', 'ped_opts'), 'Emotes',        'Animations'))
+    RMenu:Add('pd', 'walks',          RageUI.CreateSubMenu(RMenu:Get('pd', 'ped_opts'), 'Walking Styles','Movement'))
+    RMenu:Add('pd', 'weapons',        RageUI.CreateSubMenu(RMenu:Get('pd', 'ped_opts'), 'Weapons',       'Equip'))
+    RMenu:Add('pd', 'scene',          RageUI.CreateSubMenu(RMenu:Get('pd', 'main'),    'Scene Director', 'Advanced'))
+    RMenu:Add('pd', 'actor_slots',    RageUI.CreateSubMenu(RMenu:Get('pd', 'scene'),   'Actor Slots',    'Manage slots'))
+    RMenu:Add('pd', 'global_actions', RageUI.CreateSubMenu(RMenu:Get('pd', 'scene'),   'Global Actions', 'All peds'))
+
+    MenusInitialized = true
 end
 
-local function getTextureMax(ped, componentId, drawableId)
-    return GetNumberOfPedTextureVariations(ped, componentId, drawableId) - 1
-end
+-- =============================================
+-- SINGLE RENDER LOOP
+-- =============================================
 
-local function QueueMenuGoBack()
-    PendingGoBack = true
-end
+CreateThread(function()
+    while ALIVE do
+        Wait(0)
+        KeepClothCam = false
 
-local function FocusClothingCamera(focusPart)
-    if not SelectedPedEntity or not DoesEntityExist(SelectedPedEntity) then return end
-    if FocusPedDirectorCamera then
-        FocusPedDirectorCamera(SelectedPedEntity, focusPart or "Body")
-        KeepClothingCamThisFrame = true
-    end
-end
-
-local function BuildNumberLabelList(minValue, maxValue)
-    local labels = {}
-    local values = {}
-    local minV = math.floor(tonumber(minValue) or 0)
-    local maxV = math.floor(tonumber(maxValue) or minV)
-    if maxV < minV then maxV = minV end
-
-    for value = minV, maxV do
-        labels[#labels + 1] = tostring(value)
-        values[#values + 1] = value
-    end
-
-    return labels, values
-end
-
-local function FindListIndex(values, value)
-    local target = tonumber(value) or 0
-    for i = 1, #values do
-        if values[i] == target then
-            return i
+        if not (RageUI and Items and Panels and MenusInitialized) then
+            Wait(500)
+            goto continue
         end
-    end
-    return 1
-end
 
--- Main Loop
-Citizen.CreateThread(function()
-    while menuResourceActive do
-        Citizen.Wait(0)
-        KeepClothingCamThisFrame = false
-
-        local success, err = pcall(function()
-            -- Safe check for RageUI availability
-            if RageUI and Items and Panels then
-            local mainMenu = RMenu:Get('ped_director', 'main')
-            if mainMenu then
-                mainMenu:IsVisible(function(ItemsObject)
-                    ItemsObject = ItemsObject or Items
-                    
-                    ItemsObject:AddButton("Spawn Ped", "Spawn a new ped by model name", {RightLabel = "→"}, function(Selected, Active)
-                        if Selected then
-                            local model = KeyboardInput("Enter Ped Model Name", "a_m_m_skater_01", 30)
-                            if model then
-                                ExecuteCommand('spawnped ' .. model)
-                            end
-                        end
-                    end)
-
-                    ItemsObject:AddButton("Manage Peds", "View and control spawned peds", {RightLabel = "→"}, function(Selected, Active)
-                    end, RMenu:Get('ped_director', 'manage_peds'))
-
-                    ItemsObject:AddButton("Delete All Peds", "Remove all spawned peds immediately", {RightLabel = "⚠️"}, function(Selected, Active)
-                        if Selected then
-                            ExecuteCommand('clearallpeds')
-                        end
-                    end)
-                    
-                    ItemsObject:AddButton("Presets", "Save and load presets in-menu", {RightLabel = "→"}, function(Selected, Active)
-                        if Selected and RefreshPedPresets then
-                            RefreshPedPresets()
-                        end
-                    end, RMenu:Get('ped_director', 'presets'))
-
-                    ItemsObject:AddButton("Scene Director", "Advanced scene control features", {RightLabel = "→"}, function(Selected, Active)
-                    end, RMenu:Get('ped_director', 'scene_director'))
-                end, function() end)
-            end
-
-            local presetsMenu = RMenu:Get('ped_director', 'presets')
-            if presetsMenu then
-                presetsMenu:IsVisible(function(ItemsObject)
-                    ItemsObject = ItemsObject or Items
-
-                    ItemsObject:AddButton("Refresh Presets", "Reload preset list from server", {RightLabel = "↻"}, function(Selected, Active)
-                        if Selected then
-                            if RefreshPedPresets then
-                                RefreshPedPresets()
-                                Notify("Preset list refreshed.")
-                            else
-                                Notify("Preset refresh unavailable.")
-                            end
-                        end
-                    end)
-
-                    ItemsObject:AddButton("Save Nearest Ped As...", "Save the nearest spawned ped to a named preset", {RightLabel = "💾"}, function(Selected, Active)
-                        if Selected then
-                            local presetName = KeyboardInput("Enter Preset Name", "", 24)
-                            if not presetName or presetName == "" then
-                                Notify("Preset name required.")
-                                return
-                            end
-
-                            if GetClosestSpawnedPed and SavePedPreset then
-                                local ped = GetClosestSpawnedPed(10.0)
-                                if ped then
-                                    SavePedPreset(ped, presetName)
-                                else
-                                    Notify("No ped found nearby to save.")
-                                end
-                            else
-                                Notify("Preset save unavailable.")
-                            end
-                        end
-                    end)
-
-                    ItemsObject:AddSeparator("Saved Presets")
-                    local presetNames = {}
-                    if GetSavedPresetNames then
-                        presetNames = GetSavedPresetNames()
+        -- MAIN MENU
+        local mainMenu = RMenu:Get('pd', 'main')
+        if mainMenu then
+            mainMenu:IsVisible(function(I)
+                I = I or Items
+                I:AddButton('Spawn Ped', 'Spawn by model name', { RightLabel = '>' }, function(Sel)
+                    if Sel then
+                        local m = KeyboardInput('Ped Model', 'a_m_m_skater_01', 30)
+                        if m then PedDir.SpawnPed(m) end
                     end
+                end)
+                I:AddButton('Manage Peds', 'View and control', { RightLabel = '>' }, function() end, RMenu:Get('pd', 'manage'))
+                I:AddButton('Delete All', 'Remove all peds', { RightLabel = '!' }, function(Sel)
+                    if Sel then PedDir.DeleteAll(); Notify('All deleted') end
+                end)
+                I:AddButton('Presets', 'Save & load', { RightLabel = '>' }, function(Sel)
+                    if Sel then PedDir.RefreshPresets() end
+                end, RMenu:Get('pd', 'presets'))
+                I:AddButton('Scene Director', 'Advanced features', { RightLabel = '>' }, function() end, RMenu:Get('pd', 'scene'))
+            end, function() end)
+        end
 
-                    if #presetNames == 0 then
-                        ItemsObject:AddSeparator("No presets found.")
-                    else
-                        for _, presetName in ipairs(presetNames) do
-                            ItemsObject:AddButton(presetName, "Spawn this preset near you", {RightLabel = "Load"}, function(Selected, Active)
-                                if Selected then
-                                    if LoadPedPreset then
-                                        LoadPedPreset(presetName)
-                                    else
-                                        Notify("Preset load unavailable.")
-                                    end
-                                end
-                            end)
-                        end
+        -- PRESETS MENU
+        local presetsMenu = RMenu:Get('pd', 'presets')
+        if presetsMenu then
+            presetsMenu:IsVisible(function(I)
+                I = I or Items
+                I:AddButton('Refresh', 'Reload from server', {}, function(Sel)
+                    if Sel then PedDir.RefreshPresets(); Notify('Refreshed') end
+                end)
+                I:AddButton('Save Nearest As...', 'Save nearest ped', {}, function(Sel)
+                    if Sel then
+                        local name = KeyboardInput('Preset Name', '', 24)
+                        if not name or name == '' then return end
+                        local ped = PedDir.GetClosest(10.0)
+                        if ped then PedDir.SavePreset(ped, name) else Notify('No ped nearby') end
                     end
-                end, function() end)
-            end
-
-            local managePedsMenu = RMenu:Get('ped_director', 'manage_peds')
-            if managePedsMenu then
-                managePedsMenu:IsVisible(function(ItemsObject)
-                    ItemsObject = ItemsObject or Items
-                    if SpawnedPeds and #SpawnedPeds > 0 then
-                        for i, ped in ipairs(SpawnedPeds) do
-                            if DoesEntityExist(ped) then
-                                local coords = GetEntityCoords(ped)
-                                local dist = #(GetEntityCoords(PlayerPedId()) - coords)
-                                local label = string.format("Ped %d | %s | %.1fm", i, GetEntityModel(ped), dist)
-                                
-                                ItemsObject:AddButton(label, "Click to control this ped", {RightLabel = "→"}, function(Selected, Active)
-                                    if Selected then
-                                        SelectedPedIndex = i
-                                        SelectedPedEntity = ped
-                                    end
-                                end, RMenu:Get('ped_director', 'ped_options'))
-                            end
-                        end
-                    else
-                        ItemsObject:AddSeparator("No peds spawned.")
-                    end
-                end, function() end)
-            end
-
-            local pedOptionsMenu = RMenu:Get('ped_director', 'ped_options')
-            if pedOptionsMenu then
-                pedOptionsMenu:IsVisible(function(ItemsObject)
-                    ItemsObject = ItemsObject or Items
-                    if not SelectedPedEntity or not DoesEntityExist(SelectedPedEntity) then
-                        ItemsObject:AddSeparator("Ped no longer exists.")
-                    else
-                        -- Updated Play Emote Logic: Opens Submenu, refreshes list on selection
-                        ItemsObject:AddButton("Play Emote", "Search and play an animation", {RightLabel = "→"}, function(Selected, Active)
-                            if Selected then
-                                UpdateEmoteList() -- Refresh list on open
-                            end
-                        end, RMenu:Get('ped_director', 'emotes'))
-
-                        -- Follow Me Checkbox Replacement
-                        local isFollowing = FollowPeds and FollowPeds[SelectedPedEntity]
-                        local followLabel = isFollowing and "Follow Me [x]" or "Follow Me [ ]"
-                        ItemsObject:AddButton(followLabel, "Make the ped follow you", {}, function(Selected, Active)
-                            if Selected then
-                                TogglePedFollow(SelectedPedEntity)
-                            end
-                        end)
-
-                        ItemsObject:AddButton("Move to Me", "Teleport ped to your location", {}, function(Selected, Active)
-                            if Selected then
-                                local pCoords = GetEntityCoords(PlayerPedId())
-                                SetEntityCoords(SelectedPedEntity, pCoords.x + 1.0, pCoords.y, pCoords.z - 1.0, false, false, false, true)
-                            end
-                        end)
-                        
-                        ItemsObject:AddButton("Walk to Waypoint", "Make ped walk to map waypoint", {}, function(Selected, Active)
-                            if Selected then
-                                MakePedWalkToWaypoint(SelectedPedEntity)
-                            end
-                        end)
-                        
-                        ItemsObject:AddButton("Positioning Tools", "Simple move/rotate controls", {RightLabel = "→"}, function(Selected, Active)
-                        end, RMenu:Get('ped_director', 'positioning'))
-
-                        ItemsObject:AddButton("Place In Front of Me", "Move ped to stand in front of you", {}, function(Selected, Active)
-                            if Selected then
-                                local playerPed = PlayerPedId()
-                                local target = GetOffsetFromEntityInWorldCoords(playerPed, 0.0, 1.5, -1.0)
-                                SetEntityCoords(SelectedPedEntity, target.x, target.y, target.z, false, false, false, true)
-                                SetEntityHeading(SelectedPedEntity, GetEntityHeading(playerPed) + 180.0)
-                                if not IsEntityPositionFrozen(SelectedPedEntity) then
-                                    TaskStandStill(SelectedPedEntity, 500)
-                                end
-                            end
-                        end)
-
-                        -- Frozen Checkbox Replacement
-                        local isFrozen = IsEntityPositionFrozen(SelectedPedEntity)
-                        local freezeLabel = "Frozen [ ]"
-                        if isFrozen then freezeLabel = "Frozen [x]" end
-
-                        ItemsObject:AddButton(freezeLabel, "Freeze/Unfreeze ped position", {}, function(Selected, Active)
-                            if Selected then
-                                FreezeEntityPosition(SelectedPedEntity, not isFrozen)
-                            end
-                        end)
-
-                        ItemsObject:AddButton("Customize Clothing", "Change ped components", {RightLabel = "→"}, function(Selected, Active)
-                        end, RMenu:Get('ped_director', 'clothing'))
-                        
-                        ItemsObject:AddButton("Walking Style", "Set movement clipset", {RightLabel = "→"}, function(Selected, Active)
-                        end, RMenu:Get('ped_director', 'walking_styles'))
-                        
-                        ItemsObject:AddButton("Give Weapon", "Equip ped with weapon", {RightLabel = "→"}, function(Selected, Active)
-                        end, RMenu:Get('ped_director', 'weapons'))
-
-                        ItemsObject:AddButton("~r~Delete Ped", "Remove this ped", {}, function(Selected, Active)
-                            if Selected then
-                                DeleteEntity(SelectedPedEntity)
-                                if SelectedPedIndex and SpawnedPeds[SelectedPedIndex] == SelectedPedEntity then
-                                    table.remove(SpawnedPeds, SelectedPedIndex)
-                                end
-                                QueueMenuGoBack()
-                            end
+                end)
+                I:AddSeparator('Saved Presets')
+                local names = PedDir.GetPresetNames()
+                if #names == 0 then
+                    I:AddSeparator('None found')
+                else
+                    for _, n in ipairs(names) do
+                        I:AddButton(n, 'Load this preset', { RightLabel = 'Load' }, function(Sel)
+                            if Sel then PedDir.LoadPreset(n) end
                         end)
                     end
-                end, function() end)
-            end
-            
-            -- Positioning Menu
-            local posMenu = RMenu:Get('ped_director', 'positioning')
-            if posMenu then
-                posMenu:IsVisible(function(ItemsObject)
-                    ItemsObject = ItemsObject or Items
-                    if SelectedPedEntity and DoesEntityExist(SelectedPedEntity) then
-                        local coords = GetEntityCoords(SelectedPedEntity)
-                        local heading = GetEntityHeading(SelectedPedEntity)
-                        
-                        ItemsObject:AddSeparator(string.format("X: %.2f Y: %.2f Z: %.2f H: %.1f", coords.x, coords.y, coords.z, heading))
-                        
-                        ItemsObject:AddButton("Snap to Ground", "Place ped on solid ground", {}, function(Selected, Active)
-                            if Selected then
-                                SnapPedToGround(SelectedPedEntity)
-                            end
-                        end)
-                        
-                        ItemsObject:AddSeparator("Nudge Settings")
-                        
-                        -- Toggle Movement Mode
-                        local relLabel = MovementModeRelative and "Relative Movement [x]" or "Relative Movement [ ]"
-                        ItemsObject:AddButton(relLabel, "Move relative to ped facing vs World North/South", {}, function(Selected, Active)
-                            if Selected then
-                                MovementModeRelative = not MovementModeRelative
-                            end
-                        end)
-
-                        -- Nudge Amount Selector
-                        local nudgeLabel = string.format("Step Size: %.2fm", NudgeAmount)
-                        ItemsObject:AddButton(nudgeLabel, "Click to change step size", {}, function(Selected, Active)
-                            if Selected then
-                                if NudgeAmount == 0.05 then NudgeAmount = 0.1
-                                elseif NudgeAmount == 0.1 then NudgeAmount = 0.5
-                                elseif NudgeAmount == 0.5 then NudgeAmount = 1.0
-                                else NudgeAmount = 0.05 end
-                            end
-                        end)
-                        
-                        ItemsObject:AddSeparator("Move")
-
-                        ItemsObject:AddButton("Forward / North", "Move Forward (Relative) or North (World)", {}, function(Selected, Active)
-                            if Selected then AdjustPedOffset(SelectedPedEntity, 0.0, NudgeAmount, 0.0, 0.0, MovementModeRelative) end
-                        end)
-                        
-                        ItemsObject:AddButton("Backward / South", "Move Backward (Relative) or South (World)", {}, function(Selected, Active)
-                            if Selected then AdjustPedOffset(SelectedPedEntity, 0.0, -NudgeAmount, 0.0, 0.0, MovementModeRelative) end
-                        end)
-                        
-                        ItemsObject:AddButton("Left / West", "Move Left (Relative) or West (World)", {}, function(Selected, Active)
-                            if Selected then AdjustPedOffset(SelectedPedEntity, -NudgeAmount, 0.0, 0.0, 0.0, MovementModeRelative) end
-                        end)
-                        
-                        ItemsObject:AddButton("Right / East", "Move Right (Relative) or East (World)", {}, function(Selected, Active)
-                            if Selected then AdjustPedOffset(SelectedPedEntity, NudgeAmount, 0.0, 0.0, 0.0, MovementModeRelative) end
-                        end)
-                        
-                        ItemsObject:AddButton("Up", "Move up", {}, function(Selected, Active)
-                            if Selected then AdjustPedOffset(SelectedPedEntity, 0.0, 0.0, NudgeAmount, 0.0, false) end
-                        end)
-
-                        ItemsObject:AddButton("Down", "Move down", {}, function(Selected, Active)
-                            if Selected then AdjustPedOffset(SelectedPedEntity, 0.0, 0.0, -NudgeAmount, 0.0, false) end
-                        end)
-
-                        ItemsObject:AddSeparator("Rotate")
-
-                        ItemsObject:AddButton("Rotate Left", "Rotate Counter-Clockwise", {}, function(Selected, Active)
-                            if Selected then AdjustPedOffset(SelectedPedEntity, 0.0, 0.0, 0.0, 5.0, MovementModeRelative) end
-                        end)
-
-                        ItemsObject:AddButton("Rotate Right", "Rotate Clockwise", {}, function(Selected, Active)
-                            if Selected then AdjustPedOffset(SelectedPedEntity, 0.0, 0.0, 0.0, -5.0, MovementModeRelative) end
-                        end)
-                        
-                        ItemsObject:AddSeparator("Absolute")
-                        ItemsObject:AddButton("Place In Front of Me", "Instantly position in front of you", {}, function(Selected, Active)
-                            if Selected then
-                                local playerPed = PlayerPedId()
-                                local target = GetOffsetFromEntityInWorldCoords(playerPed, 0.0, 1.5, -1.0)
-                                SetEntityCoords(SelectedPedEntity, target.x, target.y, target.z, false, false, false, true)
-                                SetEntityHeading(SelectedPedEntity, GetEntityHeading(playerPed) + 180.0)
-                            end
-                        end)
-                        
-                        ItemsObject:AddButton("Set Coordinates manually", "Enter X, Y, Z", {}, function(Selected, Active)
-                            if Selected then
-                                local input = KeyboardInput("Enter X, Y, Z", string.format("%.2f, %.2f, %.2f", coords.x, coords.y, coords.z), 50)
-                                if input then
-                                    local x, y, z = string.match(input, "([^,]+),%s*([^,]+),%s*([^,]+)")
-                                    if x and y and z then
-                                        SetEntityCoords(SelectedPedEntity, tonumber(x), tonumber(y), tonumber(z), false, false, false, true)
-                                    else
-                                        Notify("Invalid format. Use X, Y, Z")
-                                    end
-                                end
-                            end
-                        end)
-
-                    end
-                end, function() end)
-            end
-
-            -- Walking Styles Menu
-            local walkingMenu = RMenu:Get('ped_director', 'walking_styles')
-            if walkingMenu then
-                walkingMenu:IsVisible(function(ItemsObject)
-                    ItemsObject = ItemsObject or Items
-                    if SelectedPedEntity and DoesEntityExist(SelectedPedEntity) then
-                        for _, style in ipairs(WalkingStyles) do
-                            ItemsObject:AddButton(style.label, "", {RightLabel = ""}, function(Selected, Active)
-                                if Selected then
-                                    SetPedWalkingStyle(SelectedPedEntity, style.value)
-                                end
-                            end)
-                        end
-                    end
-                end, function() end)
-            end
-            
-            -- Weapons Menu
-            local weaponsMenu = RMenu:Get('ped_director', 'weapons')
-            if weaponsMenu then
-                weaponsMenu:IsVisible(function(ItemsObject)
-                    ItemsObject = ItemsObject or Items
-                    if SelectedPedEntity and DoesEntityExist(SelectedPedEntity) then
-                        for _, weapon in ipairs(Weapons) do
-                            ItemsObject:AddButton(weapon.label, "", {RightLabel = ""}, function(Selected, Active)
-                                if Selected then
-                                    if weapon.value == "REMOVE_ALL" then
-                                        RemoveAllPedWeapons(SelectedPedEntity)
-                                    else
-                                        GivePedWeapon(SelectedPedEntity, weapon.value)
-                                    end
-                                end
-                            end)
-                        end
-                    end
-                end, function() end)
-            end
-
-            -- Emote Selection Menu
-            local emoteMenu = RMenu:Get('ped_director', 'emotes')
-            if emoteMenu then
-                emoteMenu:IsVisible(function(ItemsObject)
-                    ItemsObject = ItemsObject or Items
-                    
-                    ItemsObject:AddButton("Search...", "Filter emotes by name (" .. EmoteSearchText .. ")", {RightLabel = "🔍"}, function(Selected, Active)
-                        if Selected then
-                            local text = KeyboardInput("Search Emotes", "", 20)
-                            if text then
-                                EmoteSearchText = text
-                                UpdateEmoteList()
-                            end
-                        end
-                    end)
-
-                    -- Browse emotes functionality
-                    local MaxPage = math.max(1, math.ceil(#EmoteList / EmotePerPage))
-                    -- Ensure start index is valid
-                    if EmoteStartIndex > #EmoteList and #EmoteList > 0 then EmoteStartIndex = 1 end
-                    
-                    ItemsObject:AddButton("Page " .. math.ceil(EmoteStartIndex/EmotePerPage) .. "/" .. MaxPage, "Next page", {RightLabel = "🔄"}, function(Selected, Active)
-                        if Selected then
-                            EmoteStartIndex = EmoteStartIndex + EmotePerPage
-                            if EmoteStartIndex > #EmoteList then EmoteStartIndex = 1 end
-                        end
-                    end)
-
-                    local EndIndex = math.min(EmoteStartIndex + EmotePerPage - 1, #EmoteList)
-
-                    if #EmoteList > 0 then
-                        for i = EmoteStartIndex, EndIndex do
-                            local emote = EmoteList[i]
-                            if emote then
-                                ItemsObject:AddButton(emote.label, "Play this emote", {RightLabel = "▶"}, function(Selected, Active)
-                                    if Selected then
-                                        TriggerEvent('ped-director:playEmoteOnPed', SelectedPedEntity, emote.value)
-                                    end
-                                end)
-                            end
-                        end
-                        
-                        -- Update page info
-                        local DisplayInfo = ("Showing %d-%d of %d"):format(EmoteStartIndex, EndIndex, #EmoteList)
-                        ItemsObject:AddSeparator(DisplayInfo)
-                    else
-                        ItemsObject:AddSeparator("No emotes found.")
-                    end
-                end, function() end)
-            end
-
-            -- Component Selection Menu
-            local clothingMenu = RMenu:Get('ped_director', 'clothing')
-            if clothingMenu then
-                clothingMenu:IsVisible(function(ItemsObject)
-                    ItemsObject = ItemsObject or Items
-                    if SelectedPedEntity and DoesEntityExist(SelectedPedEntity) then
-                        FocusClothingCamera("Body")
-                        
-                        ItemsObject:AddButton("Copy Player Outfit", "Copy your current outfit to this ped", {RightLabel = "👕"}, function(Selected, Active)
-                            if Selected then
-                                local playerPed = PlayerPedId()
-                                local ped = SelectedPedEntity
-                                
-                                -- Check if models match (roughly)
-                                if IsPedMale(playerPed) ~= IsPedMale(ped) then
-                                    Notify("Warning: Gender mismatch. Outfit might look weird.")
-                                end
-
-                                -- Copy components
-                                for i = 0, 11 do
-                                    local drawable = GetPedDrawableVariation(playerPed, i)
-                                    local texture = GetPedTextureVariation(playerPed, i)
-                                    local palette = GetPedPaletteVariation(playerPed, i)
-                                    SetPedComponentVariation(ped, i, drawable, texture, palette)
-                                end
-
-                                -- Copy props
-                                local props = {0, 1, 2, 6, 7}
-                                for _, propId in ipairs(props) do
-                                    local propIndex = GetPedPropIndex(playerPed, propId)
-                                    if propIndex ~= -1 then
-                                        local propTexture = GetPedPropTextureIndex(playerPed, propId)
-                                        SetPedPropIndex(ped, propId, propIndex, propTexture, true)
-                                    else
-                                        ClearPedProp(ped, propId)
-                                    end
-                                end
-                                
-                                Notify("Outfit copied!")
-                            end
-                        end)
-                        ItemsObject:AddSeparator("Components")
-
-                        local components = {
-                            {label = 'Face', id = 0},
-                            {label = 'Mask', id = 1},
-                            {label = 'Hair', id = 2},
-                            {label = 'Torso', id = 3},
-                            {label = 'Legs', id = 4},
-                            {label = 'Bags/Parachute', id = 5},
-                            {label = 'Shoes', id = 6},
-                            {label = 'Accessories', id = 7},
-                            {label = 'Undershirt', id = 8},
-                            {label = 'Kevlar', id = 9},
-                            {label = 'Badge', id = 10},
-                            {label = 'Torso 2', id = 11},
-                            -- Props
-                            {label = 'Hat/Helmet', id = 0, isProp = true},
-                            {label = 'Glasses', id = 1, isProp = true},
-                            {label = 'Ear Accessories', id = 2, isProp = true},
-                            {label = 'Watches', id = 6, isProp = true},
-                            {label = 'Bracelets', id = 7, isProp = true},
-                        }
-
-                        for _, comp in ipairs(components) do
-                            local currentDrawable, currentTexture
-                            if comp.isProp then
-                                currentDrawable = GetPedPropIndex(SelectedPedEntity, comp.id)
-                                currentTexture = GetPedPropTextureIndex(SelectedPedEntity, comp.id)
-                            else
-                                currentDrawable = GetPedDrawableVariation(SelectedPedEntity, comp.id)
-                                currentTexture = GetPedTextureVariation(SelectedPedEntity, comp.id)
-                            end
-                            
-                            ItemsObject:AddButton(comp.label, string.format("Draw: %d | Tex: %d", currentDrawable, currentTexture), {RightLabel = "→"}, function(Selected, Active)
-                                if Selected then
-                                    SelectedComponent = comp
-                                end
-                            end, RMenu:Get('ped_director', 'clothing_edit'))
-                        end
-                    end
-                end, function() end)
-            end
-
-            -- Component Edit Menu
-            local editMenu = RMenu:Get('ped_director', 'clothing_edit')
-            if editMenu then
-                editMenu:IsVisible(function(ItemsObject)
-                    ItemsObject = ItemsObject or Items
-                    if SelectedPedEntity and DoesEntityExist(SelectedPedEntity) and SelectedComponent then
-                        FocusClothingCamera(SelectedComponent.label or "Body")
-                        local ped = SelectedPedEntity
-                        local comp = SelectedComponent
-                        
-                        local maxDrawable, currentDrawable, maxTexture, currentTexture
-                        local minDrawable = 0
-
-                        if comp.isProp then
-                            minDrawable = -1
-                            maxDrawable = GetNumberOfPedPropDrawableVariations(ped, comp.id) - 1
-                            currentDrawable = GetPedPropIndex(ped, comp.id)
-                            if currentDrawable == -1 then
-                                maxTexture = 0
-                                currentTexture = 0
-                            else
-                                maxTexture = GetNumberOfPedPropTextureVariations(ped, comp.id, currentDrawable) - 1
-                                currentTexture = GetPedPropTextureIndex(ped, comp.id)
-                            end
-                        else
-                            maxDrawable = getClothingMax(ped, comp.id)
-                            currentDrawable = GetPedDrawableVariation(ped, comp.id)
-                            maxTexture = getTextureMax(ped, comp.id, currentDrawable)
-                            currentTexture = GetPedTextureVariation(ped, comp.id)
-                        end
-
-                        local function updateComp(d, t)
-                            if comp.isProp then
-                                if d == -1 then
-                                    ClearPedProp(ped, comp.id)
-                                else
-                                    SetPedPropIndex(ped, comp.id, d, t, true)
-                                end
-                            else
-                                SetPedClothing(ped, comp.id, d, t)
-                            end
-                        end
-
-                        local drawableLabels, drawableValues = BuildNumberLabelList(minDrawable, maxDrawable)
-                        local drawableIndex = FindListIndex(drawableValues, currentDrawable)
-                        ItemsObject:AddList("Drawable", drawableLabels, drawableIndex, "Use left/right to change drawable.", {}, function(Index, Selected, onListChange, Active)
-                            if onListChange then
-                                local newDrawable = drawableValues[Index]
-                                updateComp(newDrawable, 0)
-                            end
-                        end)
-
-                        local safeMaxTexture = maxTexture
-                        if safeMaxTexture < 0 then safeMaxTexture = 0 end
-                        local textureLabels, textureValues = BuildNumberLabelList(0, safeMaxTexture)
-                        local textureIndex = FindListIndex(textureValues, currentTexture)
-                        local textureDesc = "Use left/right to change texture."
-                        if comp.isProp and currentDrawable == -1 then
-                            textureDesc = "Set a prop drawable first to edit textures."
-                        end
-
-                        ItemsObject:AddList("Texture", textureLabels, textureIndex, textureDesc, {}, function(Index, Selected, onListChange, Active)
-                            if onListChange then
-                                if comp.isProp and currentDrawable == -1 then
-                                    return
-                                end
-                                local newTexture = textureValues[Index]
-                                updateComp(currentDrawable, newTexture)
-                            end
-                        end)
-
-                        if comp.isProp then
-                            ItemsObject:AddButton("Clear Prop", "Remove this prop slot from the ped.", {}, function(Selected, Active)
-                                if Selected then
-                                    ClearPedProp(ped, comp.id)
-                                end
-                            end)
-                        end
-
-                    else
-                        QueueMenuGoBack()
-                    end
-                end, function() end)
-            end
-
-            if PendingGoBack then
-                PendingGoBack = false
-                if RageUI and RageUI.GoBack and RageUI.CurrentMenu then
-                    RageUI.GoBack()
                 end
-            end
+            end, function() end)
+        end
 
-            if not KeepClothingCamThisFrame and ClearPedDirectorCamera then
-                ClearPedDirectorCamera()
+        -- MANAGE PEDS
+        local manageMenu = RMenu:Get('pd', 'manage')
+        if manageMenu then
+            manageMenu:IsVisible(function(I)
+                I = I or Items
+                PedDir.Prune()
+                if #PedDir.peds > 0 then
+                    for i, ped in ipairs(PedDir.peds) do
+                        if DoesEntityExist(ped) then
+                            local dist = #(GetEntityCoords(PlayerPedId()) - GetEntityCoords(ped))
+                            local label = string.format('Ped %d | %.1fm', i, dist)
+                            I:AddButton(label, 'Select', { RightLabel = '>' }, function(Sel)
+                                if Sel then SelectedPedIndex = i; SelectedPedEntity = ped end
+                            end, RMenu:Get('pd', 'ped_opts'))
+                        end
+                    end
+                else
+                    I:AddSeparator('No peds spawned')
+                end
+            end, function() end)
+        end
+
+        -- PED OPTIONS
+        local pedOptsMenu = RMenu:Get('pd', 'ped_opts')
+        if pedOptsMenu then
+            pedOptsMenu:IsVisible(function(I)
+                I = I or Items
+                if not SelectedPedEntity or not DoesEntityExist(SelectedPedEntity) then
+                    I:AddSeparator('Ped no longer exists')
+                    return
+                end
+                local ped = SelectedPedEntity
+                I:AddButton('Play Emote', 'Search and play', { RightLabel = '>' }, function(Sel)
+                    if Sel then UpdateEmoteList() end
+                end, RMenu:Get('pd', 'emotes'))
+
+                local fol = PedDir.following[ped] and '[x]' or '[ ]'
+                I:AddButton('Follow Me ' .. fol, 'Toggle follow', {}, function(Sel)
+                    if Sel then PedDir.ToggleFollow(ped) end
+                end)
+                I:AddButton('Move to Me', 'Teleport here', {}, function(Sel)
+                    if Sel then
+                        local c = GetEntityCoords(PlayerPedId())
+                        SetEntityCoords(ped, c.x + 1.0, c.y, c.z - 1.0, false, false, false, true)
+                    end
+                end)
+                I:AddButton('Walk to Waypoint', 'Walk to map marker', {}, function(Sel)
+                    if Sel then
+                        if IsWaypointActive() then
+                            PedDir.behaviors[ped] = { mode = 'towp', speed = 18.0, drivingStyle = 786603, lastTask = GetGameTimer(), arriveDistance = 8.0 }
+                            if PedDir.sceneMode == 'active' then
+                                FreezeEntityPosition(ped, false)
+                                SetBlockingOfNonTemporaryEvents(ped, false)
+                                local wp = GetBlipInfoIdCoord(GetFirstBlipInfoId(8))
+                                TaskGoStraightToCoord(ped, wp.x, wp.y, wp.z, 1.2, -1, 0.0, 0.2)
+                            end
+                            Notify('Walking to waypoint')
+                        else
+                            Notify('No waypoint set')
+                        end
+                    end
+                end)
+                I:AddButton('Positioning', 'Move & rotate', { RightLabel = '>' }, function() end, RMenu:Get('pd', 'positioning'))
+                I:AddButton('Place In Front', 'Position facing you', {}, function(Sel)
+                    if Sel then
+                        local pp = PlayerPedId()
+                        local t = GetOffsetFromEntityInWorldCoords(pp, 0.0, 1.5, -1.0)
+                        SetEntityCoords(ped, t.x, t.y, t.z, false, false, false, true)
+                        SetEntityHeading(ped, GetEntityHeading(pp) + 180.0)
+                    end
+                end)
+                local frz = IsEntityPositionFrozen(ped) and '[x]' or '[ ]'
+                I:AddButton('Frozen ' .. frz, 'Toggle freeze', {}, function(Sel)
+                    if Sel then FreezeEntityPosition(ped, not IsEntityPositionFrozen(ped)) end
+                end)
+                I:AddButton('Clothing', 'Customize appearance', { RightLabel = '>' }, function() end, RMenu:Get('pd', 'clothing'))
+                I:AddButton('Walking Style', 'Movement clipset', { RightLabel = '>' }, function() end, RMenu:Get('pd', 'walks'))
+                I:AddButton('Weapons', 'Give weapon', { RightLabel = '>' }, function() end, RMenu:Get('pd', 'weapons'))
+                I:AddButton('~r~Delete', 'Remove this ped', {}, function(Sel)
+                    if Sel then
+                        PedDir.DeletePed(ped, SelectedPedIndex)
+                        PendingGoBack = true
+                    end
+                end)
+            end, function() end)
+        end
+
+        -- POSITIONING
+        local posMenu = RMenu:Get('pd', 'positioning')
+        if posMenu then
+            posMenu:IsVisible(function(I)
+                I = I or Items
+                if not SelectedPedEntity or not DoesEntityExist(SelectedPedEntity) then return end
+                local ped = SelectedPedEntity
+                local c = GetEntityCoords(ped)
+                local h = GetEntityHeading(ped)
+                I:AddSeparator(string.format('X:%.1f Y:%.1f Z:%.1f H:%.0f', c.x, c.y, c.z, h))
+                I:AddButton('Snap to Ground', '', {}, function(Sel) if Sel then PedDir.SnapToGround(ped) end end)
+                local relLabel = MovementRelative and 'Relative [x]' or 'Relative [ ]'
+                I:AddButton(relLabel, 'Toggle relative/world', {}, function(Sel)
+                    if Sel then MovementRelative = not MovementRelative end
+                end)
+                I:AddButton(string.format('Step: %.2fm', NudgeAmount), 'Click to cycle', {}, function(Sel)
+                    if Sel then
+                        if NudgeAmount == 0.05 then NudgeAmount = 0.1
+                        elseif NudgeAmount == 0.1 then NudgeAmount = 0.5
+                        elseif NudgeAmount == 0.5 then NudgeAmount = 1.0
+                        else NudgeAmount = 0.05 end
+                    end
+                end)
+                I:AddSeparator('Move')
+                I:AddButton('Forward/North', '', {}, function(Sel) if Sel then PedDir.AdjustOffset(ped, 0, NudgeAmount, 0, 0, MovementRelative) end end)
+                I:AddButton('Backward/South', '', {}, function(Sel) if Sel then PedDir.AdjustOffset(ped, 0, -NudgeAmount, 0, 0, MovementRelative) end end)
+                I:AddButton('Left/West', '', {}, function(Sel) if Sel then PedDir.AdjustOffset(ped, -NudgeAmount, 0, 0, 0, MovementRelative) end end)
+                I:AddButton('Right/East', '', {}, function(Sel) if Sel then PedDir.AdjustOffset(ped, NudgeAmount, 0, 0, 0, MovementRelative) end end)
+                I:AddButton('Up', '', {}, function(Sel) if Sel then PedDir.AdjustOffset(ped, 0, 0, NudgeAmount, 0, false) end end)
+                I:AddButton('Down', '', {}, function(Sel) if Sel then PedDir.AdjustOffset(ped, 0, 0, -NudgeAmount, 0, false) end end)
+                I:AddSeparator('Rotate')
+                I:AddButton('Rotate Left', '', {}, function(Sel) if Sel then PedDir.AdjustOffset(ped, 0, 0, 0, 5.0, MovementRelative) end end)
+                I:AddButton('Rotate Right', '', {}, function(Sel) if Sel then PedDir.AdjustOffset(ped, 0, 0, 0, -5.0, MovementRelative) end end)
+                I:AddSeparator('Absolute')
+                I:AddButton('Place In Front', '', {}, function(Sel)
+                    if Sel then
+                        local pp = PlayerPedId()
+                        local t = GetOffsetFromEntityInWorldCoords(pp, 0.0, 1.5, -1.0)
+                        SetEntityCoords(ped, t.x, t.y, t.z, false, false, false, true)
+                        SetEntityHeading(ped, GetEntityHeading(pp) + 180.0)
+                    end
+                end)
+                I:AddButton('Enter Coords', 'Type X, Y, Z', {}, function(Sel)
+                    if Sel then
+                        local input = KeyboardInput('X, Y, Z', string.format('%.2f, %.2f, %.2f', c.x, c.y, c.z), 50)
+                        if input then
+                            local x, y, z = string.match(input, '([^,]+),%s*([^,]+),%s*([^,]+)')
+                            if x and y and z then
+                                SetEntityCoords(ped, tonumber(x), tonumber(y), tonumber(z), false, false, false, true)
+                            else
+                                Notify('Invalid format')
+                            end
+                        end
+                    end
+                end)
+            end, function() end)
+        end
+
+        -- EMOTES
+        local emoteMenu = RMenu:Get('pd', 'emotes')
+        if emoteMenu then
+            emoteMenu:IsVisible(function(I)
+                I = I or Items
+                I:AddButton('Search...', 'Filter: ' .. EmoteSearchText, {}, function(Sel)
+                    if Sel then
+                        local t = KeyboardInput('Search Emotes', '', 20)
+                        if t then EmoteSearchText = t; UpdateEmoteList() end
+                    end
+                end)
+                local maxPage = math.max(1, math.ceil(#EmoteList / EmotePerPage))
+                if EmoteStartIndex > #EmoteList and #EmoteList > 0 then EmoteStartIndex = 1 end
+                I:AddButton('Page ' .. math.ceil(EmoteStartIndex / EmotePerPage) .. '/' .. maxPage, 'Next page', {}, function(Sel)
+                    if Sel then
+                        EmoteStartIndex = EmoteStartIndex + EmotePerPage
+                        if EmoteStartIndex > #EmoteList then EmoteStartIndex = 1 end
+                    end
+                end)
+                local endIdx = math.min(EmoteStartIndex + EmotePerPage - 1, #EmoteList)
+                if #EmoteList > 0 then
+                    for i = EmoteStartIndex, endIdx do
+                        local em = EmoteList[i]
+                        if em then
+                            I:AddButton(em.label, 'Play', {}, function(Sel)
+                                if Sel and SelectedPedEntity then PedDir.PlayEmote(SelectedPedEntity, em.value) end
+                            end)
+                        end
+                    end
+                    I:AddSeparator(string.format('%d-%d of %d', EmoteStartIndex, endIdx, #EmoteList))
+                else
+                    I:AddSeparator('No emotes found')
+                end
+            end, function() end)
+        end
+
+        -- WALKING STYLES
+        local walksMenu = RMenu:Get('pd', 'walks')
+        if walksMenu then
+            walksMenu:IsVisible(function(I)
+                I = I or Items
+                if SelectedPedEntity and DoesEntityExist(SelectedPedEntity) then
+                    for _, s in ipairs(WalkingStyles) do
+                        I:AddButton(s.label, '', {}, function(Sel)
+                            if Sel then PedDir.SetWalkStyle(SelectedPedEntity, s.value) end
+                        end)
+                    end
+                end
+            end, function() end)
+        end
+
+        -- WEAPONS
+        local weaponsMenu = RMenu:Get('pd', 'weapons')
+        if weaponsMenu then
+            weaponsMenu:IsVisible(function(I)
+                I = I or Items
+                if SelectedPedEntity and DoesEntityExist(SelectedPedEntity) then
+                    for _, w in ipairs(Weapons) do
+                        I:AddButton(w.label, '', {}, function(Sel)
+                            if Sel then
+                                if w.value == 'REMOVE_ALL' then PedDir.RemoveWeapons(SelectedPedEntity)
+                                else PedDir.GiveWeapon(SelectedPedEntity, w.value) end
+                            end
+                        end)
+                    end
+                end
+            end, function() end)
+        end
+
+        -- CLOTHING
+        local clothingMenu = RMenu:Get('pd', 'clothing')
+        if clothingMenu then
+            clothingMenu:IsVisible(function(I)
+                I = I or Items
+                if not SelectedPedEntity or not DoesEntityExist(SelectedPedEntity) then return end
+                PedDir.FocusClothCam(SelectedPedEntity, 'Body')
+                KeepClothCam = true
+                local ped = SelectedPedEntity
+                I:AddButton('Copy Player Outfit', 'Clone your clothes', {}, function(Sel)
+                    if Sel then
+                        local pp = PlayerPedId()
+                        for i = 0, 11 do
+                            SetPedComponentVariation(ped, i,
+                                GetPedDrawableVariation(pp, i),
+                                GetPedTextureVariation(pp, i),
+                                GetPedPaletteVariation(pp, i))
+                        end
+                        for _, pid in ipairs({0, 1, 2, 6, 7}) do
+                            local pi = GetPedPropIndex(pp, pid)
+                            if pi ~= -1 then SetPedPropIndex(ped, pid, pi, GetPedPropTextureIndex(pp, pid), true)
+                            else ClearPedProp(ped, pid) end
+                        end
+                        Notify('Outfit copied')
+                    end
+                end)
+                I:AddSeparator('Components')
+                local components = {
+                    {l='Face',id=0},{l='Mask',id=1},{l='Hair',id=2},{l='Torso',id=3},{l='Legs',id=4},
+                    {l='Bags/Chute',id=5},{l='Shoes',id=6},{l='Accessories',id=7},{l='Undershirt',id=8},
+                    {l='Kevlar',id=9},{l='Badge',id=10},{l='Torso 2',id=11},
+                    {l='Hat/Helmet',id=0,prop=true},{l='Glasses',id=1,prop=true},
+                    {l='Ears',id=2,prop=true},{l='Watches',id=6,prop=true},{l='Bracelets',id=7,prop=true},
+                }
+                for _, comp in ipairs(components) do
+                    local d, t
+                    if comp.prop then
+                        d = GetPedPropIndex(ped, comp.id)
+                        t = GetPedPropTextureIndex(ped, comp.id)
+                    else
+                        d = GetPedDrawableVariation(ped, comp.id)
+                        t = GetPedTextureVariation(ped, comp.id)
+                    end
+                    I:AddButton(comp.l, string.format('D:%d T:%d', d, t), { RightLabel = '>' }, function(Sel)
+                        if Sel then SelectedComponent = comp end
+                    end, RMenu:Get('pd', 'clothing_edit'))
+                end
+            end, function() end)
+        end
+
+        -- CLOTHING EDIT
+        local editMenu = RMenu:Get('pd', 'clothing_edit')
+        if editMenu then
+            editMenu:IsVisible(function(I)
+                I = I or Items
+                if not SelectedPedEntity or not DoesEntityExist(SelectedPedEntity) or not SelectedComponent then
+                    PendingGoBack = true
+                    return
+                end
+                PedDir.FocusClothCam(SelectedPedEntity, SelectedComponent.l or 'Body')
+                KeepClothCam = true
+                local ped = SelectedPedEntity
+                local comp = SelectedComponent
+                local minD = comp.prop and -1 or 0
+                local maxD, curD, maxT, curT
+
+                if comp.prop then
+                    maxD = GetNumberOfPedPropDrawableVariations(ped, comp.id) - 1
+                    curD = GetPedPropIndex(ped, comp.id)
+                    if curD == -1 then maxT = 0; curT = 0
+                    else
+                        maxT = GetNumberOfPedPropTextureVariations(ped, comp.id, curD) - 1
+                        curT = GetPedPropTextureIndex(ped, comp.id)
+                    end
+                else
+                    maxD = GetNumberOfPedDrawableVariations(ped, comp.id) - 1
+                    curD = GetPedDrawableVariation(ped, comp.id)
+                    maxT = GetNumberOfPedTextureVariations(ped, comp.id, curD) - 1
+                    curT = GetPedTextureVariation(ped, comp.id)
+                end
+
+                local function Apply(d, t)
+                    if comp.prop then
+                        if d == -1 then ClearPedProp(ped, comp.id)
+                        else SetPedPropIndex(ped, comp.id, d, t, true) end
+                    else
+                        PedDir.SetClothing(ped, comp.id, d, t)
+                    end
+                end
+
+                local dLabels, dValues = BuildNumberList(minD, maxD)
+                local dIdx = FindListIndex(dValues, curD)
+                I:AddList('Drawable', dLabels, dIdx, 'Left/right to change', {}, function(Idx, Sel, Changed)
+                    if Changed then Apply(dValues[Idx], 0) end
+                end)
+
+                if maxT < 0 then maxT = 0 end
+                local tLabels, tValues = BuildNumberList(0, maxT)
+                local tIdx = FindListIndex(tValues, curT)
+                I:AddList('Texture', tLabels, tIdx, 'Left/right to change', {}, function(Idx, Sel, Changed)
+                    if Changed then
+                        if comp.prop and curD == -1 then return end
+                        Apply(curD, tValues[Idx])
+                    end
+                end)
+
+                if comp.prop then
+                    I:AddButton('Clear Prop', '', {}, function(Sel)
+                        if Sel then ClearPedProp(ped, comp.id) end
+                    end)
+                end
+            end, function() end)
+        end
+
+        -- SCENE DIRECTOR
+        local sceneMenu = RMenu:Get('pd', 'scene')
+        if sceneMenu then
+            sceneMenu:IsVisible(function(I)
+                I = I or Items
+                local modeStr = PedDir.sceneMode == 'setup' and 'SETUP' or 'ACTIVE'
+                I:AddButton('Mode: ' .. modeStr, 'Toggle mode', {}, function(Sel)
+                    if Sel then PedDir.ToggleSceneMode() end
+                end)
+                I:AddButton('Actor Slots', 'Manage slots', { RightLabel = '>' }, function() end, RMenu:Get('pd', 'actor_slots'))
+                I:AddButton('Global Actions', 'All peds', { RightLabel = '>' }, function() end, RMenu:Get('pd', 'global_actions'))
+                I:AddButton('Possess Nearest', 'Camera control', {}, function(Sel)
+                    if Sel then ExecuteCommand('possess') end
+                end)
+                I:AddButton('Clone Nearest', 'Duplicate ped', {}, function(Sel)
+                    if Sel then ExecuteCommand('cloneped') end
+                end)
+                I:AddButton('Reset Scene', 'Clear everything', {}, function(Sel)
+                    if Sel then PedDir.SceneReset() end
+                end)
+                I:AddButton('Teleport All', 'To waypoint', {}, function(Sel)
+                    if Sel then ExecuteCommand('teleportall') end
+                end)
+            end, function() end)
+        end
+
+        -- ACTOR SLOTS
+        local slotsMenu = RMenu:Get('pd', 'actor_slots')
+        if slotsMenu then
+            slotsMenu:IsVisible(function(I)
+                I = I or Items
+                for slot = 1, 9 do
+                    local ped = PedDir.slots[slot]
+                    local occupied = ped and DoesEntityExist(ped)
+                    local label = 'Slot ' .. slot .. (occupied and ' (Occupied)' or ' (Empty)')
+                    I:AddButton(label, '', { RightLabel = occupied and 'SWAP' or 'ASSIGN' }, function(Sel)
+                        if Sel then
+                            if occupied then PedDir.StartPossess(ped)
+                            else ExecuteCommand('assignslot ' .. slot) end
+                        end
+                    end)
+                end
+            end, function() end)
+        end
+
+        -- GLOBAL ACTIONS
+        local globalMenu = RMenu:Get('pd', 'global_actions')
+        if globalMenu then
+            globalMenu:IsVisible(function(I)
+                I = I or Items
+                I:AddButton('Waypoint All', 'Set waypoint for all', {}, function(Sel)
+                    if Sel then ExecuteCommand('waypointall') end
+                end)
+                I:AddButton('Emote All', 'Apply emote to all', {}, function(Sel)
+                    if Sel then
+                        local em = KeyboardInput('Emote Name', '', 30)
+                        if em then ExecuteCommand('emoteall ' .. em) end
+                    end
+                end)
+                I:AddButton('Stop All', 'Stop all animations', {}, function(Sel)
+                    if Sel then ExecuteCommand('stopall') end
+                end)
+                local chaseLabel = PedDir.chasing and 'Stop Chase' or 'Start Chase'
+                I:AddButton(chaseLabel, 'Vehicle chase', {}, function(Sel)
+                    if Sel then ExecuteCommand('pedchase') end
+                end)
+                local escortLabel = PedDir.escorting and 'Stop Escort' or 'Start Escort'
+                I:AddButton(escortLabel, 'Vehicle escort', {}, function(Sel)
+                    if Sel then ExecuteCommand('pedescort') end
+                end)
+            end, function() end)
+        end
+
+        -- PENDING GO-BACK
+        if PendingGoBack then
+            PendingGoBack = false
+            if RageUI and RageUI.GoBack and RageUI.CurrentMenu then
+                RageUI.GoBack()
             end
         end
-        end) -- end pcall
 
-        if not success then
-            print("[ped-director] Main menu error: " .. tostring(err))
-            Citizen.Wait(5000) -- Wait longer on error
+        -- CLOTHING CAMERA CLEANUP
+        if not KeepClothCam then
+            PedDir.ClearClothCam()
         end
+
+        ::continue::
     end
 end)
 
--- Wait for RageUI to be ready
-local function WaitForRageUI(timeoutMs)
-    local startTime = GetGameTimer()
-    while (not RageUI or not Items or not Panels) do
-        EnsureRageUILoaded()
-        if GetGameTimer() - startTime > (timeoutMs or 10000) then
-            return false
-        end
-        Citizen.Wait(100)
-    end
-    return true
-end
+-- =============================================
+-- COMMAND & KEYBIND
+-- =============================================
 
--- Command to open menu
 RegisterCommand('pedmenu', function()
     if not WaitForRageUI(5000) then
-        Notify('RageUI is still loading. Please wait and try again.')
-        print("[ped-director] RageUI not ready. RageUI:", RageUI ~= nil, "Items:", Items ~= nil, "Panels:", Panels ~= nil)
+        Notify('RageUI still loading, try again')
         return
     end
-    
-    InitializeMenus()
-    local mainMenu = RMenu:Get('ped_director', 'main')
-    if mainMenu then
-        RageUI.Visible(mainMenu, not RageUI.Visible(mainMenu))
-    end
+    InitMenus()
+    local m = RMenu:Get('pd', 'main')
+    if m then RageUI.Visible(m, not RageUI.Visible(m)) end
 end)
 
--- Scene Director Submenus
-Citizen.CreateThread(function()
-    while menuResourceActive do
-        Citizen.Wait(0)
-
-        local success, err = pcall(function()
-        if RageUI and Items and Panels then
-            -- Scene Director Menu
-                local sceneDirectorMenu = RMenu:Get('ped_director', 'scene_director')
-                if sceneDirectorMenu then
-                    sceneDirectorMenu:IsVisible(function(ItemsObject)
-                    ItemsObject = ItemsObject or Items
-
-                    local modeText = SceneMode == "setup" and "SETUP" or "ACTIVE"
-                    ItemsObject:AddButton("Scene Mode: " .. modeText, "Toggle between setup and active modes", {RightLabel = SceneMode == "setup" and "SETUP" or "ACTIVE"}, function(Selected, Active)
-                        if Selected then
-                            ExecuteCommand('scenemode')
-                        end
-                    end)
-
-                    ItemsObject:AddButton("Actor Slots", "Assign and manage ped slots", {RightLabel = "→"}, function(Selected, Active)
-                    end, RMenu:Get('ped_director', 'actor_slots'))
-
-                    ItemsObject:AddButton("Global Actions", "Apply actions to all peds", {RightLabel = "→"}, function(Selected, Active)
-                    end, RMenu:Get('ped_director', 'global_actions'))
-
-                    ItemsObject:AddButton("Possess Nearest", "Take control of nearest ped", {RightLabel = "👁️"}, function(Selected, Active)
-                        if Selected then
-                            ExecuteCommand('possess')
-                        end
-                    end)
-
-                    ItemsObject:AddButton("Clone Nearest", "Create a copy of nearest ped", {RightLabel = "📋"}, function(Selected, Active)
-                        if Selected then
-                            ExecuteCommand('cloneped')
-                        end
-                    end)
-
-                    ItemsObject:AddButton("Reset Scene", "Clear all slots and behaviors", {RightLabel = "🔄"}, function(Selected, Active)
-                        if Selected then
-                            ExecuteCommand('scenereset')
-                        end
-                    end)
-
-                    ItemsObject:AddButton("Teleport All", "Move all peds to waypoint", {RightLabel = "📍"}, function(Selected, Active)
-                        if Selected then
-                            ExecuteCommand('teleportall')
-                        end
-                    end)
-
-                    ItemsObject:AddButton("Add Stage Light", "Create light at current position", {RightLabel = "💡"}, function(Selected, Active)
-                        if Selected then
-                            ExecuteCommand('addlight')
-                        end
-                    end)
-                end, function() end)
-            end
-
-            -- Actor Slots Menu
-            local actorSlotsMenu = RMenu:Get('ped_director', 'actor_slots')
-            if actorSlotsMenu then
-                actorSlotsMenu:IsVisible(function(ItemsObject)
-                    ItemsObject = ItemsObject or Items
-
-                    for slot = 1, 9 do
-                        local ped = ActorSlots[slot]
-                        local label = "Slot " .. slot
-                        if ped and DoesEntityExist(ped) then
-                            label = label .. " (Occupied)"
-                        else
-                            label = label .. " (Empty)"
-                        end
-
-                        ItemsObject:AddButton(label, "Assign/swap to this slot", {RightLabel = ped and "SWAP" or "ASSIGN"}, function(Selected, Active)
-                            if Selected then
-                                if ped and DoesEntityExist(ped) then
-                                    ExecuteCommand('swapslot ' .. slot)
-                                else
-                                    ExecuteCommand('assignslot ' .. slot)
-                                end
-                            end
-                        end)
-                    end
-                end, function() end)
-            end
-
-            -- Global Actions Menu
-            local globalActionsMenu = RMenu:Get('ped_director', 'global_actions')
-            if globalActionsMenu then
-                globalActionsMenu:IsVisible(function(ItemsObject)
-                    ItemsObject = ItemsObject or Items
-
-                    ItemsObject:AddButton("Waypoint All", "Set same waypoint for all peds", {RightLabel = "📍"}, function(Selected, Active)
-                        if Selected then
-                            ExecuteCommand('waypointall')
-                        end
-                    end)
-
-                    ItemsObject:AddButton("Emote All", "Apply emote to all peds", {RightLabel = "💃"}, function(Selected, Active)
-                        if Selected then
-                            local emote = KeyboardInput("Enter Emote Name", "", 30)
-                            if emote then
-                                ExecuteCommand('emoteall ' .. emote)
-                            end
-                        end
-                    end)
-
-                    ItemsObject:AddButton("Stop All", "Stop animations for all peds", {RightLabel = "⏹️"}, function(Selected, Active)
-                        if Selected then
-                            ExecuteCommand('stopall')
-                        end
-                    end)
-
-                    local chaseText = IsChasingPlayer and "Stop Chase" or "Start Chase"
-                    ItemsObject:AddButton(chaseText, "Vehicle chase mode", {RightLabel = "🚗"}, function(Selected, Active)
-                        if Selected then
-                            ExecuteCommand('pedchase')
-                        end
-                    end)
-
-                    local escortText = IsEscortingPlayer and "Stop Escort" or "Start Escort"
-                    ItemsObject:AddButton(escortText, "Vehicle escort mode", {RightLabel = "🚙"}, function(Selected, Active)
-                        if Selected then
-                            ExecuteCommand('pedescort')
-                        end
-                    end)
-
-                    ItemsObject:AddButton("Clear Stage Lights", "Remove all stage lights", {RightLabel = "🕯️"}, function(Selected, Active)
-                        if Selected then
-                            ExecuteCommand('removelight')
-                        end
-                    end)
-                end, function() end)
-            end
-        end
-        end) -- end pcall
-
-        if not success then
-            print("[ped-director] Menu error: " .. tostring(err))
-            Citizen.Wait(5000) -- Wait longer on error
-        end
-    end
-end)
-
--- Keybind
 RegisterKeyMapping('pedmenu', 'Open Ped Director Menu', 'keyboard', 'F6')
 
-AddEventHandler("onClientResourceStop", function(resourceName)
-    if resourceName ~= GetCurrentResourceName() then return end
+-- =============================================
+-- LIFECYCLE
+-- =============================================
 
-    -- Stop menu loops immediately. Avoid RageUI native calls during unload.
-    menuResourceActive = false
+AddEventHandler('onClientResourceStop', function(res)
+    if res ~= GetCurrentResourceName() then return end
+    ALIVE = false
 end)

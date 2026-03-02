@@ -1,9 +1,9 @@
 fx_version 'cerulean'
 game 'gta5'
 
-author 'Claude'
-description 'Spawn AI peds with animations for R* Editor videos'
-version '1.3.0'
+author 'TCP'
+description 'Spawn and direct AI peds for R* Editor scenes'
+version '2.0.0'
 
 dependencies {
     'RageUI'
@@ -21,8 +21,6 @@ files {
 }
 
 server_script 'server.lua'
-
-
 
 data_file 'DLC_ITYP_REQUEST' 'stream/props/Scully/scully_props.ytyp'
 data_file 'DLC_ITYP_REQUEST' 'stream/props/KnjghPizzaSlices/knjgh_pizzas.ytyp'
@@ -47,8 +45,8 @@ data_file 'DLC_ITYP_REQUEST' 'stream/props/badge1/badge1.ytyp'
 data_file 'DLC_ITYP_REQUEST' 'stream/props/rpemotesreborn/prop_vin_storytime_popcorn.ytyp'
 data_file 'DLC_ITYP_REQUEST' 'stream/props/BzzzFoodPack/bzzz_foodpack.ytyp'
 data_file 'DLC_ITYP_REQUEST' 'stream/props/babe/bebekbus.ytyp'
+
 client_scripts {
-    -- RageUI (must be loaded into this resource context)
     '@RageUI/src/RageUI.lua',
     '@RageUI/src/Menu.lua',
     '@RageUI/src/MenuController.lua',
@@ -56,7 +54,8 @@ client_scripts {
     '@RageUI/src/elements/*.lua',
     '@RageUI/src/items/*.lua',
 
-    -- Resource Scripts
     'client/rpemotes/init.lua',
-    'client/*.lua'
+    'client/emotes.lua',
+    'client/client.lua',
+    'client/menu.lua'
 }
