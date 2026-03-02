@@ -35,6 +35,7 @@ client_scripts {
         'client/c_brakelights.lua',
         'client/c_moveover.lua',
         'client/c_weapons.lua',
+        'client/c_ads_firstperson.lua',
         'client/c_doors.lua',
         'client/c_vehicle_state.lua',
         'client/c_damage_feed.lua',
