@@ -70,26 +70,26 @@ Citizen.CreateThread(function()
 							and GetPedDrawableVariation(ped, 7) > 177
 							and GetWeapontypeGroup(GetSelectedPedWeapon(ped)) == 416676503 then
 
-						loadAnimDict("rcmjosh4")
-						TaskPlayAnim(ped,"rcmjosh4","josh_leadout_cop2",8.0,2.0,-1,48,10,0,0,0)
-						Citizen.Wait(600)
-						ClearPedTasks(ped)
+							loadAnimDict("rcmjosh4")
+							-- -- TaskPlayAnim(ped,"rcmjosh4","josh_leadout_cop2",8.0,2.0,-1,48,10,0,0,0)
+							Citizen.Wait(600)
+							ClearPedTasks(ped)
 
-					elseif playerModel == GetHashKey("mp_m_freemode_01")
-						and GetPedDrawableVariation(ped, 8) > 206
-						and GetWeapontypeGroup(GetSelectedPedWeapon(ped)) == 690389602 then
+						elseif playerModel == GetHashKey("mp_m_freemode_01")
+							and GetPedDrawableVariation(ped, 8) > 206
+							and GetWeapontypeGroup(GetSelectedPedWeapon(ped)) == 690389602 then
 
-						loadAnimDict("combat@reaction_aim@pistol")
-						TaskPlayAnim(ped,"combat@reaction_aim@pistol","0",8.0,2.0,-1,48,10,0,0,0)
-						Citizen.Wait(300)
-						ClearPedTasks(ped)
+							RequestAnimDict("combat@reaction_aim@pistol")
+							-- -- TaskPlayAnim(ped,"combat@reaction_aim@pistol","0",8.0,2.0,-1,48,10,0,0,0)
+							Citizen.Wait(300)
+							ClearPedTasks(ped)
 
-					else
-						loadAnimDict("combat@reaction_aim@pistol")
-						TaskPlayAnim(ped,"combat@reaction_aim@pistol","0",8.0,2.0,-1,48,10,0,0,0)
-						Citizen.Wait(300)
-						ClearPedTasks(ped)
-					end
+						else
+							RequestAnimDict("combat@reaction_aim@pistol")
+							-- -- TaskPlayAnim(ped,"combat@reaction_aim@pistol","-0",8.0,2.0,-1,48,10,0,0,0)
+							Citizen.Wait(300)
+							ClearPedTasks(ped)
+						end
 
 						if playerModel == GetHashKey("mp_m_freemode_01") then
 							if (GetPedDrawableVariation(ped, 7) == 193 or GetPedDrawableVariation(ped, 7) == 194)
@@ -131,30 +131,30 @@ Citizen.CreateThread(function()
 				if not holstered then
 					if not (stopHolsterAnimation or IsPedInAnyVehicle(ped, true)) then
 
-					if playerModel == GetHashKey("mp_m_freemode_01")
-						and GetPedDrawableVariation(ped, 7) > 177
-						and GetWeapontypeGroup(weapon) == 416676503 then
+						if playerModel == GetHashKey("mp_m_freemode_01")
+							and GetPedDrawableVariation(ped, 7) > 177
+							and GetWeapontypeGroup(weapon) == 416676503 then
 
-						loadAnimDict("rcmjosh4")
-						TaskPlayAnim(ped,"rcmjosh4","josh_leadout_cop2",8.0,2.0,-1,48,10,0,0,0)
-						Citizen.Wait(600)
-						ClearPedTasks(ped)
+							loadAnimDict("rcmjosh4")
+							-- -- TaskPlayAnim(ped,"rcmjosh4","josh_leadout_cop2",8.0,2.0,-1,48,10,0,0,0)
+							Citizen.Wait(600)
+							ClearPedTasks(ped)
 
-					elseif playerModel == GetHashKey("mp_m_freemode_01")
-						and GetPedDrawableVariation(ped, 8) > 206
-						and GetWeapontypeGroup(weapon) == 690389602 then
+						elseif playerModel == GetHashKey("mp_m_freemode_01")
+							and GetPedDrawableVariation(ped, 8) > 206
+							and GetWeapontypeGroup(weapon) == 690389602 then
 
-						loadAnimDict("combat@reaction_aim@pistol")
-						TaskPlayAnim(ped,"combat@reaction_aim@pistol","0",8.0,2.0,-1,48,10,0,0,0)
-						Citizen.Wait(300)
-						ClearPedTasks(ped)
+							RequestAnimDict("combat@reaction_aim@pistol")
+							-- -- TaskPlayAnim(ped,"combat@reaction_aim@pistol","0",8.0,2.0,-1,48,10,0,0,0)
+							Citizen.Wait(300)
+							ClearPedTasks(ped)
 
-					else
-						loadAnimDict("combat@reaction_aim@pistol")
-						TaskPlayAnim(ped,"combat@reaction_aim@pistol","0",8.0,2.0,-1,48,10,0,0,0)
-						Citizen.Wait(300)
-						ClearPedTasks(ped)
-					end
+						else
+							RequestAnimDict("combat@reaction_aim@pistol")
+							-- -- TaskPlayAnim(ped,"combat@reaction_aim@pistol","-0",8.0,2.0,-1,48,10,0,0,0)
+							Citizen.Wait(300)
+							ClearPedTasks(ped)
+						end
 					end
 
 					holstered = true
@@ -188,7 +188,7 @@ RegisterCommand("holster", function()
 		keepHandOnHolster = true
 		stopHolsterAnimation = true
 
-		TaskPlayAnim(ped,"anim@holster_walk","holster_walk",8.0,2.0,-1,50,2.0,0,0,0)
+		-- TaskPlayAnim(ped,"anim@holster_walk","holster_walk",8.0,2.0,-1,50,2.0,0,0,0)
 
 		while keepHandOnHolster do
 			Citizen.Wait(0)
