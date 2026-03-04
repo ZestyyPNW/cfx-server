@@ -14,6 +14,20 @@ local function isAllowedMdcUser(src)
     return false
 end
 
+local function getOnDutyPlayers()
+    local targets = {}
+    for _, playerId in ipairs(GetPlayers()) do
+        local id = tonumber(playerId)
+        if id then
+            local onduty = Player(id).state.onduty
+            if onduty == true then
+                targets[#targets + 1] = id
+            end
+        end
+    end
+    return targets
+end
+
 RegisterNetEvent('gpsinfo')
 AddEventHandler('gpsinfo', function(model, x, y, z, _, siren)
     local src = source
@@ -22,12 +36,16 @@ AddEventHandler('gpsinfo', function(model, x, y, z, _, siren)
     y = tonumber(y)
     z = tonumber(z)
     if not x or not y or not z then return end
-    TriggerClientEvent('c_cargps', -1, model, x, y, z, src, siren)
+    for _, target in ipairs(getOnDutyPlayers()) do
+        TriggerClientEvent('c_cargps', target, model, x, y, z, src, siren)
+    end
 end)
 
 RegisterNetEvent('gpsinfor')
 AddEventHandler('gpsinfor', function(_)
     local src = source
     if not isAllowedMdcUser(src) then return end
-    TriggerClientEvent('c_cargpsr', -1, src)
+    for _, target in ipairs(getOnDutyPlayers()) do
+        TriggerClientEvent('c_cargpsr', target, src)
+    end
 end)

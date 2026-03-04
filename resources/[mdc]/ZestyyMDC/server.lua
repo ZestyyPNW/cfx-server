@@ -1726,7 +1726,12 @@ CreateThread(function()
 
             lastBlipPayloadJson = payloadJson
             lastBlipSentAt = now
-            TriggerClientEvent("ZestyyMDC:UpdateCallBlips", -1, payload)
+            for _, pid in ipairs(GetPlayers()) do
+                local id = tonumber(pid)
+                if id and Player(id).state.onduty == true then
+                    TriggerClientEvent("ZestyyMDC:UpdateCallBlips", id, payload)
+                end
+            end
         end, 'GET')
         Wait(5000)
     end
