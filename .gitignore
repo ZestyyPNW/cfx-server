@@ -86,3 +86,4 @@ run.sh.old
 server.authz
 permissions.cfg.bak.*
 server.cfg
+resources/[misc]/vMenu/config/permissions.cfg
