@@ -85,3 +85,4 @@ server.cfg.pre-ndcore.bak
 run.sh.old
 server.authz
 permissions.cfg.bak.*
+server.cfg
