@@ -5,14 +5,23 @@ function sanitizeURL(url) {
 
 function getYoutubeUrlId(url) {
     let videoId = "";
-    if (url.indexOf("youtube") !== -1) {
-        let urlParts = url.split("?v=");
-        videoId = urlParts[1].substring(0, 11);
-    }
+    try {
+        if (url.indexOf("youtube") !== -1) {
+            let match = url.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+            if (match) {
+                videoId = match[1];
+            } else if (url.indexOf("/shorts/") !== -1) {
+                let shortsParts = url.split("/shorts/");
+                if (shortsParts[1]) videoId = shortsParts[1].substring(0, 11);
+            }
+        }
 
-    if (url.indexOf("youtu.be") !== -1) {
-        let urlParts = url.replace("//", "").split("/");
-        videoId = urlParts[1].substring(0, 11);
+        if (!videoId && url.indexOf("youtu.be") !== -1) {
+            let urlParts = url.replace("//", "").split("/");
+            if (urlParts[1]) videoId = urlParts[1].split(/[?&#]/)[0].substring(0, 11);
+        }
+    } catch (e) {
+        videoId = "";
     }
     return videoId;
 }

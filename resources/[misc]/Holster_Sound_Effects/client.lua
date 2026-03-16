@@ -32,9 +32,9 @@ Citizen.CreateThread(function()
 			elseif not CheckWeapon(ped) then
         if not holstered then
           TriggerEvent("holster:sounds", "holster", 0.2)
-					TaskPlayAnim(ped, "weapons@pistol@", "aim_2_holster", 2.0, 2.0, -1, 48, 10, 0, 0, 0 )
+					TaskPlayAnim(ped, "weapons@pistol@", "aim_2_holster", 2.0, 2.0, 500, 16, 10, 0, 0, 0 )
 					Citizen.Wait(500)
-					ClearPedTasks(ped)
+					StopAnimTask(ped, "weapons@pistol@", "aim_2_holster", 1.0)
 					holstered = true
 				end
 			end

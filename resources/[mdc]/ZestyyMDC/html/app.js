@@ -4,7 +4,7 @@ const topbar = document.getElementById('topbar');
 const resizeHandle = document.getElementById('resizeHandle');
 const btnClose = document.getElementById('btnClose');
 const btnReload = document.getElementById('btnReload');
-const ENABLE_RESIZE_HANDLE = false;
+const ENABLE_RESIZE_HANDLE = true;
 
 let lastUrl = null;
 let initialized = false;
@@ -372,7 +372,8 @@ window.addEventListener('message', (event) => {
   if (data.type === 'mdcUnit') {
     nuiFetch('setUnit', {
       unit: data.unit || '',
-      name: data.name || ''
+      name: data.name || '',
+      source: data.source || ''
     }).catch(() => null);
     return;
   }

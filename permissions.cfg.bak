@@ -197,9 +197,20 @@ add_principal group.admin group.moderator
 ####################################
 #       GLOBAL PERMISSIONS         #
 ####################################
-# Grant ALL vMenu permissions to everyone.
-add_ace builtin.everyone "vMenu.Everything" allow
-add_ace builtin.everyone "vMenu.Staff" allow
+# Keep vMenu's wildcard permission disabled; it will override per-feature denies (like VoiceChat).
+# add_ace builtin.everyone "vMenu.Everything" allow
+# add_ace group.admin "vMenu.Everything" allow
+#
+# Only grant vMenu.Staff to staff groups (see below); do not give it to everyone.
+# add_ace builtin.everyone "vMenu.Staff" allow
+
+# Disable vMenu Voice Chat Settings so pma-voice controls voice proximity/channel.
+add_ace builtin.everyone "vMenu.VoiceChat.Menu" deny
+add_ace builtin.everyone "vMenu.VoiceChat.All" deny
+add_ace group.moderator "vMenu.VoiceChat.Menu" deny
+add_ace group.moderator "vMenu.VoiceChat.All" deny
+add_ace group.admin "vMenu.VoiceChat.Menu" deny
+add_ace group.admin "vMenu.VoiceChat.All" deny
 
 # Prevent admins from getting banned/kicked from the server.
 add_ace group.admin "vMenu.DontKickMe" allow

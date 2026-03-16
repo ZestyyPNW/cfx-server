@@ -122,7 +122,8 @@ window.addEventListener('message', function(event) {
             headers: { 'Content-Type': 'application/json; charset=UTF-8' },
             body: JSON.stringify({
                 unit: event.data.unit || '',
-                name: event.data.name || ''
+                name: event.data.name || '',
+                source: event.data.source || ''
             })
         });
     } else if (event.data.type === 'mdcCallNotification') {

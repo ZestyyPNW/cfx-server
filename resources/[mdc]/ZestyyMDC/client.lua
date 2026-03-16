@@ -363,6 +363,7 @@ end)
 RegisterNUICallback("setUnit", function(data, cb)
   local unit = data and data.unit or ""
   local fullName = data and data.name or ""
+  local source = data and data.source or ""
 
   if ndCharacter and ndCharacter.firstname and ndCharacter.lastname then
     fullName = (ndCharacter.firstname .. " " .. ndCharacter.lastname)
@@ -375,6 +376,30 @@ RegisterNUICallback("setUnit", function(data, cb)
   end
 
   unit = tostring(unit or ""):gsub("^%s+", ""):gsub("%s+$", ""):upper()
+  local current = LocalPlayer.state and LocalPlayer.state.unitid or nil
+  local normalizedCurrent = current and tostring(current):gsub("^%s+", ""):gsub("%s+$", ""):upper() or ""
+  local sourceLower = tostring(source or ""):lower()
+  if sourceLower == "login-sync" and normalizedCurrent ~= "" then
+    cb({ ok = true })
+    return
+  end
+
+  if normalizedCurrent ~= "" then
+    if unit == "" then
+      dbg("Ignoring unit clear from source:", sourceLower, "current:", normalizedCurrent)
+      cb({ ok = true, ignored = true })
+      return
+    end
+
+    if unit ~= normalizedCurrent then
+      local allowChange = sourceLower == "user" or sourceLower == "manual" or sourceLower == "mdc" or sourceLower == "mdc-ui"
+      if not allowChange then
+        dbg("Ignoring unit change from source:", sourceLower, "incoming:", unit, "current:", normalizedCurrent)
+        cb({ ok = true, ignored = true })
+        return
+      end
+    end
+  end
 
   LocalPlayer.state:set("unitid", unit, true)
   LocalPlayer.state:set("firstname", first, true)
@@ -753,4 +778,3 @@ AddEventHandler("ZestyyMDC:PlayDispatchAnim", function()
         ClearPedTasks(ped)
     end
 end)
-

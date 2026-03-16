@@ -73,6 +73,32 @@ local function ensurePlayerRID(src, player)
     return rid, true
 end
 
+RegisterCommand("mdc_rid", function(source, args)
+    local target = tonumber(args and args[1] or nil)
+    if not target then
+        print("^3[ZestyyMDC]^7 Usage: mdc_rid <serverId>")
+        return
+    end
+
+    if GetResourceState('ND_Core') ~= 'started' then
+        print("^1[ZestyyMDC]^7 ND_Core not started; cannot assign RID.")
+        return
+    end
+
+    local ok, player = pcall(function()
+        return exports['ND_Core']:getPlayer(target)
+    end)
+    if not ok or not player then
+        print(("^1[ZestyyMDC]^7 No player found for server ID %s."):format(target))
+        return
+    end
+
+    local rid = ensurePlayerRID(target, player)
+    TriggerClientEvent('whackerlink:setRID', target, tostring(rid))
+    TriggerClientEvent("zestyymdc:playerRID", target, rid)
+    print(("^2[ZestyyMDC]^7 Forced RID sync for %s -> %s."):format(target, tostring(rid)))
+end, true)
+
 -- Check if vehicle is in allowed vehicles list
 local function isAllowedVehicle(vehicle)
     if not DoesEntityExist(vehicle) then
