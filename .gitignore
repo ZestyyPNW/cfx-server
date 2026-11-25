@@ -87,3 +87,13 @@ server.authz
 permissions.cfg.bak.*
 server.cfg
 resources/[misc]/vMenu/config/permissions.cfg
+
+# Security audit material — never publish (public commit feed)
+docs/audit/
+*security-audit*.md
+*-money-audit.md
+*-player-lifecycle.md
+*-resource-map.md
+
+# Live secrets (tokens.cfg is exec'd by server.cfg)
+tokens.cfg
