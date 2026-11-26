@@ -130,9 +130,13 @@ end)
 
 -- heartbeat: every 60s while the resource runs
 CreateThread(function()
-    -- server presence heartbeat: runs whether or not players are online
+    -- server presence heartbeat: runs whether or not players are online,
+    -- now with player counts (PULSE-001)
+    local peakOnline = 0
     while true do
-        apiRequest('POST', '/sessions/heartbeat', {}, function(ok) end)
+        local online = #GetPlayers()
+        if online > peakOnline then peakOnline = online end
+        apiRequest('POST', '/sessions/heartbeat', { players = { online = online, peak = peakOnline } }, function(ok) end)
         Wait(60000)
     end
 end)
