@@ -136,8 +136,44 @@ CreateThread(function()
     while true do
         local online = #GetPlayers()
         if online > peakOnline then peakOnline = online end
-        apiRequest('POST', '/sessions/heartbeat', { players = { online = online, peak = peakOnline } }, function(ok) end)
-        Wait(60000)
+        local payload = { players = { online = online, peak = peakOnline } }
+        -- SVC-001: push live character slices for ONLINE players on every beat.
+        -- The game stays authoritative: Connect stores a timestamped snapshot only.
+        if online > 0 then
+            local licenses = {}
+            for _, src in ipairs(GetPlayers()) do
+                for _, id in ipairs(GetPlayerIdentifiers(src)) do
+                    if id:sub(1, 8) == 'license:' then licenses[#licenses + 1] = id end
+                end
+            end
+            if #licenses > 0 then
+                exports.oxmysql:query(
+                    'SELECT identifier, charid, firstname, lastname, cash, bank FROM nd_characters WHERE identifier IN (?)',
+                    { licenses }, function(rows)
+                        if rows and #rows > 0 then
+                            local chars = {}
+                            for _, c in ipairs(rows) do
+                                chars[#chars + 1] = {
+                                    subject = c.identifier,
+                                    charid = c.charid,
+                                    first_name = c.firstname,
+                                    last_name = c.lastname,
+                                    money = { cash = c.cash, bank = c.bank },
+                                }
+                            end
+                            -- send immediately (own beat) so the snapshot is fresh
+                            apiRequest('POST', '/sessions/heartbeat', { players = { online = online, peak = peakOnline }, services = { characters = chars } }, function(ok) end)
+                        end
+                    end)
+                Wait(60000)
+            else
+                apiRequest('POST', '/sessions/heartbeat', payload, function(ok) end)
+                Wait(60000)
+            end
+        else
+            apiRequest('POST', '/sessions/heartbeat', payload, function(ok) end)
+            Wait(60000)
+        end
     end
 end)
 
