@@ -130,10 +130,9 @@ end)
 
 -- heartbeat: every 60s while the resource runs
 CreateThread(function()
+    -- server presence heartbeat: runs whether or not players are online
     while true do
-        if next(sessionMembers) ~= nil then
-            apiRequest('POST', '/sessions/heartbeat', {}, function(ok) end)
-        end
+        apiRequest('POST', '/sessions/heartbeat', {}, function(ok) end)
         Wait(60000)
     end
 end)
